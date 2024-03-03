@@ -54,7 +54,7 @@ class Label(object):
     #: Some labels allow printing in red, most don't.
     color = attrib(type=Color, default=Color.BLACK_WHITE)
 
-    def works_with_model(self, model): # type: bool
+    def works_with_model(self, model) -> bool:
         """
         Method to determine if certain label can be printed by the specified printer model.
         """
@@ -64,7 +64,7 @@ class Label(object):
             return True
 
     @property
-    def name(self): # type: str
+    def name(self) -> str:
         out = ""
 
         if self.form_factor in (FormFactor.DIE_CUT,):
