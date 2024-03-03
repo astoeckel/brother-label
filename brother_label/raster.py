@@ -97,16 +97,20 @@ class BrotherLabelRaster(object):
         self.data += b'\x00' * self.device.num_invalidate_bytes
 
     @property
-    def mtype(self): return self._mtype
+    def mtype(self):
+        return self._mtype
 
     @property
-    def mwidth(self): return self._mwidth
+    def mwidth(self):
+        return self._mwidth
 
     @property
-    def mlength(self): return self._mlength
+    def mlength(self):
+        return self._mlength
 
     @property
-    def pquality(self): return self._pquality
+    def pquality(self):
+        return self._pquality
 
     @mtype.setter
     def mtype(self, value):
