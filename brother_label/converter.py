@@ -56,7 +56,8 @@ class BrotherLabelConverter(object):
         compress = kwargs.get('compress', True)
         red = kwargs.get('red', False)
         rotate = kwargs.get('rotate', 'auto')
-        if rotate != 'auto': rotate = int(rotate)
+        if rotate != 'auto':
+            rotate = int(rotate)
         dpi_600 = kwargs.get('dpi_600', False)
         hq = kwargs.get('hq', True)
         threshold = kwargs.get('threshold', 70)
@@ -187,7 +188,8 @@ class BrotherLabelConverter(object):
                 pass
             raster.add_margins(label.feed_margin)
             try:
-                if compress: raster.add_compression(True)
+                if compress:
+                    raster.add_compression(True)
             except BrotherQLUnsupportedCmd:
                 pass
             if red:

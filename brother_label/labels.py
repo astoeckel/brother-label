@@ -58,8 +58,10 @@ class Label(object):
         """
         Method to determine if certain label can be printed by the specified printer model.
         """
-        if self.restricted_to_models and model not in models: return False
-        else: return True
+        if self.restricted_to_models and model not in models:
+            return False
+        else:
+            return True
 
     @property
     def name(self): # type: str

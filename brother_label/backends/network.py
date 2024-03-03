@@ -93,7 +93,8 @@ class BrotherQLBackendNetwork(BrotherQLBackendGeneric):
                 result, _, _ = select.select([self.s], [], [], 0)
                 if self.s in result:
                     data += self.s.recv(length)
-                if data: break
+                if data:
+                    break
                 time.sleep(0.001)
             return data
         else:

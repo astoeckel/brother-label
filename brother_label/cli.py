@@ -223,7 +223,8 @@ def print_cmd(ctx, no_compress, no_cut, *args, **kwargs):
 def analyze_cmd(ctx, *args, **kwargs):
     from .reader import BrotherQLReader
     br = BrotherQLReader(kwargs.get('instructions'))
-    if kwargs.get('filename_format'): br.filename_fmt = kwargs.get('filename_format')
+    if kwargs.get('filename_format'):
+        br.filename_fmt = kwargs.get('filename_format')
     br.analyse()
 
 @cli.command('send', short_help='send an instruction file to the printer')
