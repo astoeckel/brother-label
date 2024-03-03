@@ -117,7 +117,7 @@ def rasterize(
         f_src.write(f.read())
         f_src.flush()
 
-        if target_height_px <= 0:
+        if target_height_px is not None and target_height_px <= 0:
             target_height_px = None
 
         images: typing.List[Image.Image] = []
