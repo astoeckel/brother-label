@@ -11,6 +11,7 @@ import PIL.ImageOps, PIL.ImageChops
 from . import BrotherQLUnsupportedCmd
 from .labels import FormFactor
 from .raster import BrotherLabelRaster
+from .ghostscript import iterate_pages
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,12 @@ class BrotherLabelConverter(object):
         except BrotherQLUnsupportedCmd:
             pass
 
-        for image in images:
+        if dpi_600:
+            dots_expected = [el*2 for el in label.dots_printable]
+        else:
+            dots_expected = label.dots_printable
+
+        for image in iterate_pages(images, *dots_expected):
             if isinstance(image, Image.Image):
                 im = image
             else:
@@ -96,11 +102,6 @@ class BrotherLabelConverter(object):
             elif im.mode == "L" and red:
                 # Convert greyscale to RGB if printing on black/red tape
                 im = im.convert("RGB")
-
-            if dpi_600:
-                dots_expected = [el*2 for el in label.dots_printable]
-            else:
-                dots_expected = label.dots_printable
 
             if label.form_factor in (FormFactor.ENDLESS, FormFactor.PTOUCH_ENDLESS):
                 if rotate not in ('auto', 0):
