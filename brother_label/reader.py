@@ -150,13 +150,6 @@ RESP_BYTE_NAMES = [
 ]
 
 
-def hex_format(data):
-    try:  # Py3
-        return " ".join("{:02X}".format(byte) for byte in data)
-    except ValueError:  # Py2
-        return " ".join("{:02X}".format(ord(byte)) for byte in data)
-
-
 def chunker(data, raise_exception=False):
     """
     Breaks data stream (bytes) into a list of bytes objects containing single instructions each.
@@ -173,9 +166,7 @@ def chunker(data, raise_exception=False):
         try:
             opcode = match_opcode(data)
         except:
-            msg = "unknown opcode starting with {}...)".format(
-                hex_format(data[0:4])
-            )
+            msg = f"unknown opcode starting with {data[0:4].hex()}...)"
             if raise_exception:
                 raise ValueError(msg)
             else:
@@ -208,14 +199,9 @@ def match_opcode(data):
 def interpret_response(data):
     data = bytes(data)
     if len(data) < 32:
-        raise NameError(
-            "Insufficient amount of data received", hex_format(data)
-        )
+        raise NameError("Insufficient amount of data received", data.hex())
     if not data.startswith(b"\x80\x20\x42"):
-        raise NameError(
-            "Printer response doesn't start with the usual header (80:20:42)",
-            hex_format(data),
-        )
+        raise NameError("Printer response doesn't start with the usual header (80:20:42)", data.hex())
     for i, byte_name in enumerate(RESP_BYTE_NAMES):
         logger.debug("Byte %2d %24s %02X", i, byte_name + ":", data[i])
     errors = []
@@ -332,13 +318,12 @@ class BrotherQLReader(object):
                         self.raster_no = None
                         self.black_rows = []
                         self.red_rows = []
-                    payload = instruction[len(opcode) :]
+                    payload = instruction[len(opcode):]
                     logger.debug(
-                        " {} ({}) --> found! (payload: {})".format(
-                            opcode_def[0],
-                            hex_format(opcode),
-                            hex_format(payload),
-                        )
+                        " %s (%s) --> found! (payload: %s)",
+                        opcode_def[0],
+                        opcode.hex(),
+                        payload.hex(),
                     )
                     if opcode_def[0] == "compression":
                         self.compression = payload[0] == 0x02
