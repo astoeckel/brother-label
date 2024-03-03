@@ -19,6 +19,7 @@ from .exceptions import BrotherQLError, BrotherQLRasterError, BrotherQLUnsupport
 
 logger = logging.getLogger(__name__)
 
+
 class BrotherLabelRaster(object):
     """
     This class facilitates the creation of a complete set
@@ -47,7 +48,7 @@ class BrotherLabelRaster(object):
         self._compression = False
         self.exception_on_warning = False
 
-    def _warn(self, problem, kind=BrotherQLRasterError):
+    def _warn(self, problem, kind: type[BrotherQLError] = BrotherQLRasterError):
         """
         Logs the warning message `problem` or raises a
         `BrotherQLRasterError` exception (changeable via `kind`)
