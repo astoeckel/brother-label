@@ -2,6 +2,7 @@
 
 # Python standard library
 from __future__ import print_function
+
 import logging
 
 # external dependencies
@@ -10,7 +11,6 @@ import click
 # imports from this very package
 from .backends import available_backends
 from .devices import BrotherDeviceManager
-
 
 logger = logging.getLogger('brother_label')
 
@@ -118,8 +118,11 @@ def env_cmd(ctx, *args, **kwargs):
     """
     print debug info about running environment
     """
-    import sys, platform, os, shutil
-    from pkg_resources import get_distribution, working_set
+    import platform
+    import shutil
+    import sys
+
+    from pkg_resources import get_distribution
     print("\n##################\n")
     print("Information about the running environment of brother_label.")
     print("(Please provide this information when reporting any issue.)\n")

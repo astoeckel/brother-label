@@ -1,8 +1,8 @@
-from attr import attrs, attrib
-from typing import List, Tuple
 from enum import IntEnum
+from typing import Tuple
 
-from .core import ElementManager
+from attr import attrib, attrs
+
 
 class FormFactor(IntEnum):
     """

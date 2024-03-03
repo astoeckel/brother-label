@@ -7,17 +7,15 @@ The central piece of code in this module is the class
 :py:class:`BrotherQLRaster`.
 """
 
-from builtins import bytes
-
-import struct
 import logging
+import struct
+from builtins import bytes
+from io import BytesIO
 
 import packbits
 from PIL import Image
-from io import BytesIO
-import io
 
-from . import BrotherQLError, BrotherQLUnsupportedCmd, BrotherQLUnknownModel, BrotherQLRasterError
+from .exceptions import BrotherQLError, BrotherQLRasterError, BrotherQLUnsupportedCmd
 
 logger = logging.getLogger(__name__)
 

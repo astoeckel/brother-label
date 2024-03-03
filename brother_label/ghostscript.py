@@ -5,13 +5,13 @@ one for each page.
 @author Andreas Stöckel
 """
 import io
+import logging
 import os
 import re
-import tempfile
-import typing
-import logging
 import shutil
 import subprocess
+import tempfile
+import typing
 
 from PIL import Image
 

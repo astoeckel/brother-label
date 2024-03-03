@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 
 from __future__ import division, unicode_literals
-from builtins import str
 
 import logging
 
+import PIL.ImageChops
+import PIL.ImageOps
 from PIL import Image
-import PIL.ImageOps, PIL.ImageChops
 
 from . import BrotherQLUnsupportedCmd
+from .ghostscript import iterate_pages
 from .labels import FormFactor
 from .raster import BrotherLabelRaster
-from .ghostscript import iterate_pages
 
 logger = logging.getLogger(__name__)
 

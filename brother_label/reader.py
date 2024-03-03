@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
-import struct
 import io
 import logging
-import sys
+import struct
+from builtins import bytes
 
 from PIL import Image
 from PIL.ImageOps import colorize
-
-from builtins import bytes
 
 logger = logging.getLogger(__name__)
 

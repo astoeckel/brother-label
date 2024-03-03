@@ -1,7 +1,3 @@
-
-from .generic import BrotherQLBackendGeneric
-
-
 available_backends = [
   'pyusb',
   'network',
@@ -23,7 +19,7 @@ def guess_backend(identifier):
 def backend_factory(backend_name):
 
     if backend_name == 'pyusb':
-        from . import pyusb        as pyusb_backend
+        from . import pyusb as pyusb_backend
         list_available_devices = pyusb_backend.list_available_devices
         backend_class          = pyusb_backend.BrotherQLBackendPyUSB
     elif backend_name == 'linux_kernel':
@@ -31,7 +27,7 @@ def backend_factory(backend_name):
         list_available_devices = linux_kernel_backend.list_available_devices
         backend_class          = linux_kernel_backend.BrotherQLBackendLinuxKernel
     elif backend_name == 'network':
-        from . import network      as network_backend
+        from . import network as network_backend
         list_available_devices = network_backend.list_available_devices
         backend_class          = network_backend.BrotherQLBackendNetwork
     else:

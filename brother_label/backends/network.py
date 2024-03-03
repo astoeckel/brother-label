@@ -6,11 +6,14 @@ Works cross-platform.
 """
 
 from __future__ import unicode_literals
+
+import select
+import socket
+import time
 from builtins import str
 
-import socket, os, time, select
-
 from .generic import BrotherQLBackendGeneric
+
 
 def list_available_devices():
     """

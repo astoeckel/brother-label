@@ -6,11 +6,15 @@ Works on Linux.
 """
 
 from __future__ import unicode_literals
+
+import glob
+import os
+import select
+import time
 from builtins import str
 
-import glob, os, time, select
-
 from .generic import BrotherQLBackendGeneric
+
 
 def list_available_devices():
     """

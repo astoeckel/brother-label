@@ -1,10 +1,11 @@
-import logging, time
+import logging
+import time
 
 from .backends import backend_factory, guess_backend
 from .backends.network import BrotherQLBackendNetwork
-from .reader import interpret_response
 from .converter import BrotherLabelConverter
 from .devices import BrotherDeviceManager
+from .reader import interpret_response
 
 logger = logging.getLogger(__name__)
 

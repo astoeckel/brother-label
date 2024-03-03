@@ -1,7 +1,6 @@
 
-from builtins import bytes
-
 import logging
+from builtins import bytes
 
 logger = logging.getLogger(__name__)
 
