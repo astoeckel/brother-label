@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
-import struct
 import io
 import logging
-import sys
+import struct
+from builtins import bytes
 
 from PIL import Image
 from PIL.ImageOps import colorize
-
-from builtins import bytes
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +127,8 @@ def chunker(data, raise_exception=False):
     instructions = []
     data = bytes(data)
     while True:
-        if len(data) == 0: break
+        if len(data) == 0:
+            break
         try:
             opcode = match_opcode(data)
         except:
@@ -142,7 +141,8 @@ def chunker(data, raise_exception=False):
                 continue
         opcode_def = OPCODES[opcode]
         num_bytes = len(opcode)
-        if opcode_def[1] > 0: num_bytes += opcode_def[1]
+        if opcode_def[1] > 0:
+            num_bytes += opcode_def[1]
         elif opcode_def[0] in ('raster QL', '2-color raster QL'):
             num_bytes += data[2] + 2
         elif opcode_def[0] in ('raster P-touch',):
@@ -290,7 +290,8 @@ class BrotherQLReader(object):
                                     num = num + 1
                                     row += rpl[index+1:index+1+num]
                                     index += 1 + num
-                                if index >= len(rpl): break
+                                if index >= len(rpl):
+                                    break
                         else:
                             row = rpl
                         if opcode_def[0] in ('raster QL', 'raster P-touch'):
@@ -316,7 +317,8 @@ class BrotherQLReader(object):
                         logger.info("Len of black rows: %d", len(self.black_rows))
                         logger.info("Len of red   rows: %d", len(self.red_rows))
                         def get_im(rows):
-                            if not len(rows): return None
+                            if not len(rows):
+                                return None
                             width_dots  = max(len(row) for row in rows)
                             height_dots = len(rows)
                             size = (width_dots*8, height_dots)

@@ -5,13 +5,13 @@ one for each page.
 @author Andreas Stöckel
 """
 import io
+import logging
 import os
 import re
-import tempfile
-import typing
-import logging
 import shutil
 import subprocess
+import tempfile
+import typing
 
 from PIL import Image
 
@@ -117,7 +117,7 @@ def rasterize(
         f_src.write(f.read())
         f_src.flush()
 
-        if target_height_px <= 0:
+        if target_height_px is not None and target_height_px <= 0:
             target_height_px = None
 
         images: typing.List[Image.Image] = []

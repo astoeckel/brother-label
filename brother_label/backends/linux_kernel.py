@@ -6,11 +6,15 @@ Works on Linux.
 """
 
 from __future__ import unicode_literals
+
+import glob
+import os
+import select
+import time
 from builtins import str
 
-import glob, os, time, select
-
 from .generic import BrotherQLBackendGeneric
+
 
 def list_available_devices():
     """
@@ -69,7 +73,8 @@ class BrotherQLBackendLinuxKernel(BrotherQLBackendGeneric):
                 result, _, _ = select.select([self.read_dev], [], [], 0)
                 if self.read_dev in result:
                     data += os.read(self.read_dev, length)
-                if data: break
+                if data:
+                    break
                 time.sleep(0.001)
             if not data:
                 # one last try if still no data:

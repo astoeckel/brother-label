@@ -1,7 +1,6 @@
 
-from builtins import bytes
-
 import logging
+from builtins import bytes
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,8 @@ class BrotherQLBackendGeneric(object):
     def read(self, length=32):
         try:
             ret_bytes = self._read(length)
-            if ret_bytes: logger.debug('Read %d bytes.', len(ret_bytes))
+            if ret_bytes:
+                logger.debug('Read %d bytes.', len(ret_bytes))
             return ret_bytes
         except Exception as e:
             logger.debug('Error reading... %s', e)

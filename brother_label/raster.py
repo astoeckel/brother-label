@@ -7,19 +7,18 @@ The central piece of code in this module is the class
 :py:class:`BrotherQLRaster`.
 """
 
-from builtins import bytes
-
-import struct
 import logging
+import struct
+from builtins import bytes
+from io import BytesIO
 
 import packbits
 from PIL import Image
-from io import BytesIO
-import io
 
-from . import BrotherQLError, BrotherQLUnsupportedCmd, BrotherQLUnknownModel, BrotherQLRasterError
+from .exceptions import BrotherQLError, BrotherQLRasterError, BrotherQLUnsupportedCmd
 
 logger = logging.getLogger(__name__)
+
 
 class BrotherLabelRaster(object):
     """
@@ -49,7 +48,7 @@ class BrotherLabelRaster(object):
         self._compression = False
         self.exception_on_warning = False
 
-    def _warn(self, problem, kind=BrotherQLRasterError):
+    def _warn(self, problem, kind: type[BrotherQLError] = BrotherQLRasterError):
         """
         Logs the warning message `problem` or raises a
         `BrotherQLRasterError` exception (changeable via `kind`)
@@ -98,16 +97,20 @@ class BrotherLabelRaster(object):
         self.data += b'\x00' * self.device.num_invalidate_bytes
 
     @property
-    def mtype(self): return self._mtype
+    def mtype(self):
+        return self._mtype
 
     @property
-    def mwidth(self): return self._mwidth
+    def mwidth(self):
+        return self._mwidth
 
     @property
-    def mlength(self): return self._mlength
+    def mlength(self):
+        return self._mlength
 
     @property
-    def pquality(self): return self._pquality
+    def pquality(self):
+        return self._pquality
 
     @mtype.setter
     def mtype(self, value):

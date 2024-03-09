@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 
 from __future__ import division, unicode_literals
-from builtins import str
 
 import logging
 
+import PIL.ImageChops
+import PIL.ImageOps
 from PIL import Image
-import PIL.ImageOps, PIL.ImageChops
 
 from . import BrotherQLUnsupportedCmd
+from .ghostscript import iterate_pages
 from .labels import FormFactor
 from .raster import BrotherLabelRaster
-from .ghostscript import iterate_pages
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ class BrotherLabelConverter(object):
         compress = kwargs.get('compress', True)
         red = kwargs.get('red', False)
         rotate = kwargs.get('rotate', 'auto')
-        if rotate != 'auto': rotate = int(rotate)
+        if rotate != 'auto':
+            rotate = int(rotate)
         dpi_600 = kwargs.get('dpi_600', False)
         hq = kwargs.get('hq', True)
         threshold = kwargs.get('threshold', 70)
@@ -187,7 +188,8 @@ class BrotherLabelConverter(object):
                 pass
             raster.add_margins(label.feed_margin)
             try:
-                if compress: raster.add_compression(True)
+                if compress:
+                    raster.add_compression(True)
             except BrotherQLUnsupportedCmd:
                 pass
             if red:
