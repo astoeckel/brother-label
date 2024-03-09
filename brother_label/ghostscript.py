@@ -1,9 +1,24 @@
-"""
-Code for automatically converting given PDF or files into a series of images,
-one for each page.
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2024 Andreas Stöckel
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-@author Andreas Stöckel
 """
+This file adds rudimentary support for directly printing PDF and PS files. It
+does that by calling the GhostScript executable in the background.
+"""
+
 import io
 import logging
 import os
@@ -39,7 +54,9 @@ def run_subprocess(*args, **kwargs) -> str:
     return res.stdout
 
 
-def extract_pdf_page_sizes_in_pt(pdf_filename: str) -> list[tuple[float, float]]:
+def extract_pdf_page_sizes_in_pt(
+    pdf_filename: str,
+) -> list[tuple[float, float]]:
     # List the number of pages and their sizes (in pt) from the PDF. See
     # https://stackoverflow.com/a/52644056
     res = run_subprocess(
@@ -124,7 +141,9 @@ def rasterize(
 
         # Determine the number of pages, and size of each page in the source file
         page_sizes_pt = extract_pdf_page_sizes_in_pt(f_src.name)
-        for page_idx, (page_width_pt, page_height_pt) in enumerate(page_sizes_pt):
+        for page_idx, (page_width_pt, page_height_pt) in enumerate(
+            page_sizes_pt
+        ):
             # Determine the DPI that we need to use to fit onto the target image
             dpi_width = int(
                 (target_width_px * 72 + 0.5 * page_width_pt) / page_width_pt
@@ -133,11 +152,14 @@ def rasterize(
                 dpi = dpi_width
             else:
                 dpi_height = int(
-                    (target_height_px * 72 + 0.5 * page_height_pt) / page_height_pt
+                    (target_height_px * 72 + 0.5 * page_height_pt)
+                    / page_height_pt
                 )
                 dpi = min(dpi_width, dpi_height)
 
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f_tar:
+            with tempfile.NamedTemporaryFile(
+                suffix=".png", delete=False
+            ) as f_tar:
                 try:
                     # Convert the page to a PNG
                     convert_pdf_page_to_png(

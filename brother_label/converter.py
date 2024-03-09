@@ -15,8 +15,9 @@ from .raster import BrotherLabelRaster
 
 logger = logging.getLogger(__name__)
 
+
 class BrotherLabelConverter(object):
-    def convert(self, device, type, images,  **kwargs):
+    def convert(self, device, type, images, **kwargs):
         r"""Converts one or more images to a raster instruction file.
 
         :param device:
@@ -43,29 +44,31 @@ class BrotherLabelConverter(object):
             * **threshold**
         """
         if not device:
-            raise LookupError('No device available')
-        
+            raise LookupError("No device available")
+
         label = device.labels_by_id[type]
         raster = BrotherLabelRaster(device)
 
         right_margin_dots = label.offset_r + device.additional_offset_r
         device_pixel_width = raster.get_pixel_width()
 
-        cut = kwargs.get('cut', True)
-        dither = kwargs.get('dither', False)
-        compress = kwargs.get('compress', True)
-        red = kwargs.get('red', False)
-        rotate = kwargs.get('rotate', 'auto')
-        if rotate != 'auto':
+        cut = kwargs.get("cut", True)
+        dither = kwargs.get("dither", False)
+        compress = kwargs.get("compress", True)
+        red = kwargs.get("red", False)
+        rotate = kwargs.get("rotate", "auto")
+        if rotate != "auto":
             rotate = int(rotate)
-        dpi_600 = kwargs.get('dpi_600', False)
-        hq = kwargs.get('hq', True)
-        threshold = kwargs.get('threshold', 70)
+        dpi_600 = kwargs.get("dpi_600", False)
+        hq = kwargs.get("hq", True)
+        threshold = kwargs.get("threshold", 70)
         threshold = 100.0 - threshold
-        threshold = min(255, max(0, int(threshold/100.0 * 255)))
+        threshold = min(255, max(0, int(threshold / 100.0 * 255)))
 
         if red and not device.two_color:
-            raise BrotherQLUnsupportedCmd('Printing in red is not supported with the selected model.')
+            raise BrotherQLUnsupportedCmd(
+                "Printing in red is not supported with the selected model."
+            )
 
         try:
             raster.add_switch_mode()
@@ -79,7 +82,7 @@ class BrotherLabelConverter(object):
             pass
 
         if dpi_600:
-            dots_expected = [el*2 for el in label.dots_printable]
+            dots_expected = [el * 2 for el in label.dots_printable]
         else:
             dots_expected = label.dots_printable
 
@@ -90,11 +93,13 @@ class BrotherLabelConverter(object):
                 try:
                     im = Image.open(image)
                 except:
-                    raise NotImplementedError("The image argument needs to be an Image() instance, the filename to an image, or a file handle.")
+                    raise NotImplementedError(
+                        "The image argument needs to be an Image() instance, the filename to an image, or a file handle."
+                    )
 
-            if im.mode.endswith('A'):
+            if im.mode.endswith("A"):
                 # place in front of white background and get red of transparency
-                bg = Image.new("RGB", im.size, (255,255,255))
+                bg = Image.new("RGB", im.size, (255, 255, 255))
                 bg.paste(im, im.split()[-1])
                 im = bg
             elif im.mode == "P":
@@ -104,49 +109,88 @@ class BrotherLabelConverter(object):
                 # Convert greyscale to RGB if printing on black/red tape
                 im = im.convert("RGB")
 
-            if label.form_factor in (FormFactor.ENDLESS, FormFactor.PTOUCH_ENDLESS):
-                if rotate not in ('auto', 0):
+            if label.form_factor in (
+                FormFactor.ENDLESS,
+                FormFactor.PTOUCH_ENDLESS,
+            ):
+                if rotate not in ("auto", 0):
                     im = im.rotate(rotate, expand=True)
                 if dpi_600:
-                    im = im.resize((im.size[0]//2, im.size[1]))
+                    im = im.resize((im.size[0] // 2, im.size[1]))
                 if im.size[0] != label.dots_printable[0]:
-                    hsize = int((label.dots_printable[0] / im.size[0]) * im.size[1])
-                    im = im.resize((label.dots_printable[0], hsize), Image.NEAREST)
-                    logger.warning('Need to resize the image...')
+                    hsize = int(
+                        (label.dots_printable[0] / im.size[0]) * im.size[1]
+                    )
+                    im = im.resize(
+                        (label.dots_printable[0], hsize), Image.NEAREST
+                    )
+                    logger.warning("Need to resize the image...")
                 if im.size[0] < device_pixel_width:
-                    new_im = Image.new(im.mode, (device_pixel_width, im.size[1]), (255,)*len(im.mode))
-                    new_im.paste(im, (device_pixel_width-im.size[0]-right_margin_dots, 0))
+                    new_im = Image.new(
+                        im.mode,
+                        (device_pixel_width, im.size[1]),
+                        (255,) * len(im.mode),
+                    )
+                    new_im.paste(
+                        im,
+                        (
+                            device_pixel_width - im.size[0] - right_margin_dots,
+                            0,
+                        ),
+                    )
                     im = new_im
-            elif label.form_factor in (FormFactor.DIE_CUT, FormFactor.ROUND_DIE_CUT):
-                if rotate == 'auto':
-                    if im.size[0] == dots_expected[1] and im.size[1] == dots_expected[0]:
+            elif label.form_factor in (
+                FormFactor.DIE_CUT,
+                FormFactor.ROUND_DIE_CUT,
+            ):
+                if rotate == "auto":
+                    if (
+                        im.size[0] == dots_expected[1]
+                        and im.size[1] == dots_expected[0]
+                    ):
                         im = im.rotate(90, expand=True)
                 elif rotate != 0:
                     im = im.rotate(rotate, expand=True)
-                if im.size[0] != dots_expected[0] or im.size[1] != dots_expected[1]:
-                    raise ValueError("Bad image dimensions: %s. Expecting: %s." % (im.size, dots_expected))
+                if (
+                    im.size[0] != dots_expected[0]
+                    or im.size[1] != dots_expected[1]
+                ):
+                    raise ValueError(
+                        "Bad image dimensions: %s. Expecting: %s."
+                        % (im.size, dots_expected)
+                    )
                 if dpi_600:
-                    im = im.resize((im.size[0]//2, im.size[1]))
-                new_im = Image.new(im.mode, (device_pixel_width, dots_expected[1]), (255,)*len(im.mode))
-                new_im.paste(im, (device_pixel_width-im.size[0]-right_margin_dots, 0))
+                    im = im.resize((im.size[0] // 2, im.size[1]))
+                new_im = Image.new(
+                    im.mode,
+                    (device_pixel_width, dots_expected[1]),
+                    (255,) * len(im.mode),
+                )
+                new_im.paste(
+                    im, (device_pixel_width - im.size[0] - right_margin_dots, 0)
+                )
                 im = new_im
 
             if red:
-                filter_h = lambda h: 255 if (h <  40 or h > 210) else 0
+                filter_h = lambda h: 255 if (h < 40 or h > 210) else 0
                 filter_s = lambda s: 255 if s > 100 else 0
-                filter_v = lambda v: 255 if v >  80 else 0
+                filter_v = lambda v: 255 if v > 80 else 0
                 red_im = self.hsv_filter(im, filter_h, filter_s, filter_v)
                 red_im = red_im.convert("L")
                 red_im = PIL.ImageOps.invert(red_im)
-                red_im = red_im.point(lambda x: 0 if x < threshold else 255, mode="1")
+                red_im = red_im.point(
+                    lambda x: 0 if x < threshold else 255, mode="1"
+                )
 
                 filter_h = lambda h: 255
                 filter_s = lambda s: 255
-                filter_v = lambda v: 255 if v <  80 else 0
+                filter_v = lambda v: 255 if v < 80 else 0
                 black_im = self.hsv_filter(im, filter_h, filter_s, filter_v)
                 black_im = black_im.convert("L")
                 black_im = PIL.ImageOps.invert(black_im)
-                black_im = black_im.point(lambda x: 0 if x < threshold else 255, mode="1")
+                black_im = black_im.point(
+                    lambda x: 0 if x < threshold else 255, mode="1"
+                )
                 black_im = PIL.ImageChops.subtract(black_im, red_im)
             else:
                 im = im.convert("L")
@@ -155,19 +199,24 @@ class BrotherLabelConverter(object):
                 if dither:
                     im = im.convert("1", dither=Image.FLOYDSTEINBERG)
                 else:
-                    im = im.point(lambda x: 0 if x < threshold else 255, mode="1")
+                    im = im.point(
+                        lambda x: 0 if x < threshold else 255, mode="1"
+                    )
 
             raster.add_status_information()
             tape_size = label.tape_size
-            if label.form_factor in (FormFactor.DIE_CUT, FormFactor.ROUND_DIE_CUT):
+            if label.form_factor in (
+                FormFactor.DIE_CUT,
+                FormFactor.ROUND_DIE_CUT,
+            ):
                 raster.mtype = 0x0B
                 raster.mwidth = tape_size[0]
                 raster.mlength = tape_size[1]
-            elif label.form_factor in (FormFactor.ENDLESS, ):
+            elif label.form_factor in (FormFactor.ENDLESS,):
                 raster.mtype = 0x0A
                 raster.mwidth = tape_size[0]
                 raster.mlength = 0
-            elif label.form_factor in (FormFactor.PTOUCH_ENDLESS, ):
+            elif label.form_factor in (FormFactor.PTOUCH_ENDLESS,):
                 raster.mtype = 0x00
                 raster.mwidth = tape_size[0]
                 raster.mlength = 0
@@ -200,10 +249,12 @@ class BrotherLabelConverter(object):
 
         return raster.data
 
-    def hsv_filter(self, im, filter_h, filter_s, filter_v, default_col=(255,255,255)):
-        """ https://stackoverflow.com/a/22237709/183995 """
+    def hsv_filter(
+        self, im, filter_h, filter_s, filter_v, default_col=(255, 255, 255)
+    ):
+        """https://stackoverflow.com/a/22237709/183995"""
 
-        hsv_im = im.convert('HSV')
+        hsv_im = im.convert("HSV")
         H, S, V = 0, 1, 2
         hsv = hsv_im.split()
         mask_h = hsv[H].point(filter_h)
@@ -211,7 +262,9 @@ class BrotherLabelConverter(object):
         mask_v = hsv[V].point(filter_v)
 
         Mdat = []
-        for h, s, v in zip(mask_h.getdata(), mask_s.getdata(), mask_v.getdata()):
+        for h, s, v in zip(
+            mask_h.getdata(), mask_s.getdata(), mask_v.getdata()
+        ):
             Mdat.append(255 if (h and s and v) else 0)
 
         mask = mask_h

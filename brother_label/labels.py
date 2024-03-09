@@ -10,6 +10,7 @@ class FormFactor(IntEnum):
     The labels for the Brother QL series are supplied either as die-cut (pre-sized), or for more flexibility the
     continuous label tapes offer the ability to vary the label length.
     """
+
     #: rectangular die-cut labels
     DIE_CUT = 1
     #: endless (continouse) labels
@@ -19,15 +20,18 @@ class FormFactor(IntEnum):
     #: endless P-touch labels
     PTOUCH_ENDLESS = 4
 
+
 class Color(IntEnum):
     """
     Enumeration representing the colors to be printed on a label. Most labels only support printing black on white.
     Some newer ones can also print in black and red on white.
     """
+
     #: The label can be printed in black & white.
     BLACK_WHITE = 0
     #: The label can be printed in black, white & red.
     BLACK_RED_WHITE = 1
+
 
 @attrs
 class Label(object):
@@ -36,6 +40,7 @@ class Label(object):
     and what the rasterizer needs to take care of depending on the
     label choosen, should be contained in this class.
     """
+
     #: A string identifier given to each label that can be selected. Eg. '29'.
     identifiers = attrib(type=[str])
     #: The tape size of a single label (width, lenght) in mm. For endless labels, the length is 0 by definition.
@@ -68,14 +73,13 @@ class Label(object):
         out = ""
 
         if self.form_factor in (FormFactor.DIE_CUT,):
-            out = '{0}mm x {1}mm die-cut'.format(*self.tape_size)
+            out = "{0}mm x {1}mm die-cut".format(*self.tape_size)
         elif self.form_factor in (FormFactor.ROUND_DIE_CUT,):
-            out = '{0}mm round die-cut'.format(self.tape_size[0])
+            out = "{0}mm round die-cut".format(self.tape_size[0])
         else:
-            out = '{0}mm endless'.format(self.tape_size[0])
+            out = "{0}mm endless".format(self.tape_size[0])
 
         if self.color == Color.BLACK_RED_WHITE:
-            out += ' (black/red/white)'
+            out += " (black/red/white)"
 
         return out
-    
