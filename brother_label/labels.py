@@ -3,11 +3,11 @@ from enum import IntEnum
 
 
 class FormFactor(IntEnum):
-    """
-    Enumeration representing the form factor of a label.
-    The labels for the Brother QL series are supplied either as die-cut
-    (pre-sized), or for more flexibility the continuous label tapes offer the
-    ability to vary the label length.
+    """Enumeration representing the form factor of a label.
+
+    The labels for the Brother QL series are supplied either as die-cut (pre-sized),
+    or for more flexibility the continuous label tapes offer the ability to vary the
+    label length.
     """
 
     #: rectangular die-cut labels
@@ -21,10 +21,10 @@ class FormFactor(IntEnum):
 
 
 class Color(IntEnum):
-    """
-    Enumeration representing the colors to be printed on a label. Most labels
-    only support printing black on white. Some newer ones can also print in
-    black and red on white.
+    """Enumeration representing the colors to be printed on a label.
+
+    Most labels only support printing black on white.
+    Some newer ones can also print in black and red on white.
     """
 
     #: The label can be printed in black & white.
@@ -35,10 +35,10 @@ class Color(IntEnum):
 
 @dataclass
 class Label:
-    """
-    This class represents a label. All specifics of a certain label
-    and what the rasterizer needs to take care of depending on the
-    label choosen, should be contained in this class.
+    """Represents a label.
+
+    All specifics of a certain label and what the rasterizer needs to take care
+    of depending on the label choosen, should be contained in this class.
     """
 
     # A string identifier given to each label that can be selected. Eg. '29'.
