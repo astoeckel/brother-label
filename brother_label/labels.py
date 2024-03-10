@@ -64,11 +64,11 @@ class Label:
     @property
     def name(self) -> str:
         if self.form_factor in (FormFactor.DIE_CUT,):
-            out = "{0}mm x {1}mm die-cut".format(*self.tape_size)
+            out = "{}mm x {}mm die-cut".format(*self.tape_size)
         elif self.form_factor in (FormFactor.ROUND_DIE_CUT,):
-            out = "{0}mm round die-cut".format(self.tape_size[0])
+            out = f"{self.tape_size[0]}mm round die-cut"
         else:
-            out = "{0}mm endless".format(self.tape_size[0])
+            out = f"{self.tape_size[0]}mm endless"
 
         if self.color == Color.BLACK_RED_WHITE:
             out += " (black/red/white)"
