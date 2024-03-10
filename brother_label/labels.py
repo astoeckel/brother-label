@@ -1,7 +1,5 @@
+from dataclasses import dataclass
 from enum import IntEnum
-from typing import Tuple
-
-from attr import attrib, attrs
 
 
 class FormFactor(IntEnum):
@@ -35,31 +33,33 @@ class Color(IntEnum):
     BLACK_RED_WHITE = 1
 
 
-@attrs
-class Label(object):
+@dataclass
+class Label:
     """
     This class represents a label. All specifics of a certain label
     and what the rasterizer needs to take care of depending on the
     label choosen, should be contained in this class.
     """
 
-    #: A string identifier given to each label that can be selected. Eg. '29'.
-    identifiers = attrib(type=[str])
-    #: The tape size of a single label (width, lenght) in mm. For endless labels, the length is 0 by definition.
-    tape_size = attrib(type=Tuple[int, int])
-    #: The type of label
-    form_factor = attrib(type=FormFactor)
-    #: The total area (width, length) of the label in dots (@300dpi).
-    dots_total = attrib(type=Tuple[int, int])
-    #: The printable area (width, length) of the label in dots (@300dpi).
-    dots_printable = attrib(type=Tuple[int, int])
-    #: The required offset from the right side of the label in dots to obtain a centered printout.
-    offset_r = attrib(type=int)
-    #: An additional amount of feeding when printing the label.
-    #: This is non-zero for some smaller label sizes and for endless labels.
-    feed_margin = attrib(type=int, default=0)
-    #: Some labels allow printing in red, most don't.
-    color = attrib(type=Color, default=Color.BLACK_WHITE)
+    # A string identifier given to each label that can be selected. Eg. '29'.
+    identifiers: list[str]
+    # The tape size of a single label (width, lenght) in mm. For endless labels, the
+    # length is 0 by definition.
+    tape_size: tuple[int, int]
+    # The type of label
+    form_factor: FormFactor
+    # The total area (width, length) of the label in dots (@300dpi).
+    dots_total: tuple[int, int]
+    # The printable area (width, length) of the label in dots (@300dpi).
+    dots_printable: tuple[int, int]
+    # The required offset from the right side of the label in dots to obtain a centered
+    # printout.
+    offset_r: int
+    # An additional amount of feeding when printing the label.
+    # This is non-zero for some smaller label sizes and for endless labels.
+    feed_margin: int = 0
+    # Some labels allow printing in red, most don't.
+    color: Color = Color.BLACK_WHITE
 
     @property
     def name(self) -> str:
