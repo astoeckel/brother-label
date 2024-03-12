@@ -1,49 +1,89 @@
-ALL_BACKENDS = [
-    "auto",
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner, Andreas Stöckel
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+import os
+
+from brother_label.backends.base import BackendBase, DeviceInfo
+
+ALL_BACKEND_NAMES = [
     "pyusb",
     "network",
-    "linux_kernel",
+    "linux",
+    "file",
 ]
 
 
-def guess_backend(identifier):
-    """guess the backend from a given identifier string for the device"""
-    if identifier.startswith("usb://") or identifier.startswith("0x"):
+def guess_backend_name(device_url: str) -> str:
+    """
+    Guesses the backend name from the given device URL.
+    """
+
+    if device_url.startswith("usb://") or device_url.startswith("0x"):
         return "pyusb"
-    elif (
-        identifier.startswith("file://")
-        or identifier.startswith("/dev/usb/")
-        or identifier.startswith("lp")
+    if (
+        device_url.startswith("lp://")
+        or device_url.startswith("/dev/usb/")
+        or device_url.startswith("lp")
     ):
-        return "linux_kernel"
-    elif identifier.startswith("tcp://"):
+        return "linux"
+    if device_url.startswith("tcp://"):
         return "network"
-    else:
-        raise ValueError(
-            "Cannot guess backend for given identifier: %s" % identifier
-        )
+    if device_url.startswith("file://"):
+        return "file"
+    if device_url:
+        try:
+            path = os.path.realpath(device_url)
+            if os.path.isfile(path):
+                return "file"
+            path = os.path.dirname(path)
+            if os.access(path, os.O_RDWR):
+                return "file"
+        except OSError:
+            pass
+
+    raise ValueError(f"Cannot guess backend for {device_url!r}")
 
 
-def backend_factory(backend_name):
+def backend_class(backend_name: str):
+    """
+    Converts the given backend name into the corresponding backend class.
+    """
+
     if backend_name == "pyusb":
-        from brother_label.backends import pyusb as pyusb_backend
+        from brother_label.backends.pyusb import BackendPyUSB
 
-        list_available_devices = pyusb_backend.list_available_devices
-        backend_class = pyusb_backend.BrotherQLBackendPyUSB
-    elif backend_name == "linux_kernel":
-        from brother_label.backends import linux as linux_kernel_backend
+        return BackendPyUSB
 
-        list_available_devices = linux_kernel_backend.list_available_devices
-        backend_class = linux_kernel_backend.BrotherQLBackendLinux
-    elif backend_name == "network":
-        from brother_label.backends import network as network_backend
+    if backend_name == "linux":
+        from brother_label.backends.linux import BackendLinux
 
-        list_available_devices = network_backend.list_available_devices
-        backend_class = network_backend.BrotherQLBackendNetwork
-    else:
-        raise NotImplementedError("Backend %s not implemented." % backend_name)
+        return BackendLinux
 
-    return {
-        "list_available_devices": list_available_devices,
-        "backend_class": backend_class,
-    }
+    if backend_name == "network":
+        from brother_label.backends.network import BackendNetwork
+
+        return BackendNetwork
+
+    if backend_name == "file":
+        from brother_label.backends.file import BackendFile
+
+        return BackendFile
+
+    raise NotImplementedError(f"Unknown backend {backend_name!r}")
+
+
+def backend_factory(backend_name: str, device_url: str):
+    return backend_class(backend_name)(device_url)

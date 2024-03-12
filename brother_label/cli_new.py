@@ -17,7 +17,11 @@
 """
 Provides the command-line parser and main entry point.
 """
+
 import logging
+import os
+import string
+import sys
 import typing
 
 import click
@@ -29,12 +33,87 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from brother_label import backends, exceptions
+from brother_label import backends, exceptions, models
+
+IMAGE_FILE_EXTS = [".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".png"]
+
+DOCUMENT_FILE_EXTS = [".eps", ".ps", ".pdf"]
+
+
+###############################################################################
+# Table printing                                                              #
+###############################################################################
+
+
+def _print_table(
+    f: typing.TextIO,
+    header: typing.Sequence[str],
+    rows: typing.Sequence[typing.Sequence[typing.Any]],
+):
+    def to_str(x):
+        if x is None:
+            return ""
+        if isinstance(x, str):
+            return x
+        if isinstance(x, list) or isinstance(x, tuple):
+            return ", ".join(to_str(y) for y in x)
+        return repr(x)
+
+    use_colour = _use_colour()
+
+    def write_row(row, bold: bool = False):
+        bold = bold and use_colour
+        for i, col in enumerate(row):
+            if i > 0:
+                f.write("│")
+            s = to_str(col)
+            f.write(" ")
+
+            need_reset = False
+            if bold:
+                f.write("\033[1m")
+                need_reset = True
+            if use_colour and s == "✔":
+                f.write("\033[32m")
+                need_reset = True
+            if use_colour and s == "✘":
+                f.write("\033[31m")
+                need_reset = True
+
+            f.write(s)
+
+            if need_reset:
+                f.write("\033[0m")
+            f.write(" " * (n_cols[i] - len(s)))
+            f.write(" ")
+        f.write("\n")
+
+    # Determine the column lengths
+    n_cols = [len(to_str(x)) for x in header]
+    for row in rows:
+        assert len(row) == len(header)
+        for i, col in enumerate(row):
+            n_cols[i] = max(n_cols[i], len(to_str(col)))
+
+    # Print the actual table
+    write_row(header, bold=True)
+    for i, n in enumerate(n_cols):
+        if i > 0:
+            f.write("╪")
+        f.write("═" * (2 + n))
+    f.write("\n")
+    for row in rows:
+        write_row(row)
 
 
 ###############################################################################
 # Utility functions                                                           #
 ###############################################################################
+
+
+def _normalise(x: str):
+    alnum = {*string.ascii_letters, *string.digits}
+    return "".join(c for c in x.lower() if c in alnum)
 
 
 def _fuzzy_match(
@@ -43,23 +122,16 @@ def _fuzzy_match(
     kind: str = "identifier",
 ) -> typing.Any:
     import difflib
-    import string
-
-    # Helper function for stripping all non-alphanumeric characters from the
-    # given string
-    def normalise(x: str):
-        alnum = {*string.ascii_letters, *string.digits}
-        return "".join(c for c in x.lower() if c in alnum)
 
     # Match the identifier after passing it through the `normalise` function
     possible_names: dict[str, str] = {}
-    needle_norm = normalise(needle)
+    needle_norm = _normalise(needle)
     for obj in haystack:
         if isinstance(obj, str):
             obj_name, obj = obj, obj
         else:
             obj_name, obj = obj
-        obj_name_norm = normalise(obj_name)
+        obj_name_norm = _normalise(obj_name)
         possible_names[obj_name_norm] = obj_name
         if obj_name_norm == needle_norm:
             return obj
@@ -80,24 +152,181 @@ def _fuzzy_match(
     )
 
 
-def _resolve_device(device: str):
-    from brother_label import devices
+def _discover(
+    *,
+    filter_backend_name: typing.Optional[str] = None,
+    filter_model_name: typing.Optional[str] = None,
+) -> list[backends.DeviceInfo]:
+    """
+    Automatically discovers all label printers. Filters devices by the given
+    backend/model name.
+    """
 
+    # If no specific backend is given, then search all backends for devices
+    if filter_backend_name is None:
+        backend_names = backends.ALL_BACKEND_NAMES
+    else:
+        backend_names = [filter_backend_name]
+
+    # Discover devices from all backends
+    device_infos: list[backends.DeviceInfo] = []
+    for backend_name in backend_names:
+        device_infos += backends.backend_class(backend_name).discover()
+
+    # Resolve USB Product IDs and model names to known models
+    for device_info in device_infos:
+        for model in models.ALL_MODELS:
+            # Prefer the model name stored in our device database over the
+            # model name read out via USB
+            if device_info.model:
+                if _normalise(device_info.model) == _normalise(model.name):
+                    device_info.model = model.name
+
+            # If we have a USB product and vendor ID match, then fill in
+            # the model name from our device database
+            usb_product_id = f"{model.usb_product_id:04x}"
+            usb_vendor_id = f"{model.usb_vendor_id:04x}"
+            if (usb_product_id == device_info.usb_product_id) and (
+                usb_vendor_id == device_info.usb_vendor_id
+            ):
+                device_info.model = model.name
+
+    # Filter by the given model name
+    if filter_model_name is not None:
+        filter_model_name = _normalise(filter_model_name)
+        device_infos = [
+            d for d in device_infos if _normalise(d.model) == filter_model_name
+        ]
+
+    # Mark devices as supported if we know the model
+    for device_info in device_infos:
+        device_info.supported = False
+        for model in models.ALL_MODELS:
+            if _normalise(device_info.model) == _normalise(model.name):
+                device_info.supported = True
+
+    # Sort the discovered devices by quality
+    sorted_device_infos = []
+    for device_info in device_infos:
+        # Prefer descriptors where we were actually able to find the model
+        has_model = bool(device_info.model)
+
+        # Prefer descriptor where we have a serial number
+        has_serial = bool(device_info.serial)
+
+        # Prefer the linux kernel backend over other backends
+        is_linux_backend = bool(device_info.backend == "linux")
+
+        # Use the last plugged device (typically USB device numbers increase)
+        usb_dev_num = device_info.usb_dev_num
+
+        # Use the newest model
+        model = str(device_info.model)
+
+        # Assemble a tuple containing the various sort criteria
+        sorted_device_infos.append(
+            (
+                device_info,
+                device_info.supported,
+                has_model,
+                has_serial,
+                is_linux_backend,
+                usb_dev_num,
+                model,
+            )
+        )
+    sorted_device_infos = sorted(
+        sorted_device_infos, key=lambda x: x[1:], reverse=True
+    )
+
+    # Now that the devices are sorted, assign a priority to them and return
+    # the list
+    res = []
+    for i, device_info in enumerate(sorted_device_infos):
+        res.append(device_info[0])
+        res[-1].priority = len(sorted_device_infos) - i
+    return res
+
+
+def _resolve_model(model_name: str) -> models.Model:
     return _fuzzy_match(
-        device, ((dev.name, dev) for dev in devices.ALL_DEVICES), "device"
+        model_name, ((dev.name, dev) for dev in models.ALL_MODELS), "model"
     )
 
 
-def _resolve_backend_name(backend: str):
+def _resolve_backend_name(backend: str) -> str:
     from brother_label import backends
 
-    return _fuzzy_match(backend, backends.ALL_BACKENDS, "backend")
+    return _fuzzy_match(backend, backends.ALL_BACKEND_NAMES, "backend")
+
+
+def _instantiate_backend_and_model(
+    *,
+    device_url: typing.Optional[str] = None,
+    backend_name: typing.Optional[str] = None,
+    model_name: typing.Optional[str] = None,
+) -> tuple[backends.BackendBase, models.Model]:
+    # If no device is given, then automatically find a device
+    if not device_url:
+        device_infos = _discover(
+            filter_model_name=model_name,
+            filter_backend_name=backend_name,
+        )
+        if not device_infos or not device_infos[0].supported:
+            raise exceptions.BrotherQLError(
+                "Did not discover a supported label printer. Double-check that "
+                "the printer is plugged into the computer and powered on. "
+                "Alternatively, to skip auto-discovery, explicitly override "
+                "the target device using the -d/--device option."
+            )
+        device_info = device_infos[0]
+        device_url = device_info.device_url
+        if not backend_name:
+            backend_name = device_info.backend
+        if not model_name:
+            model_name = device_info.model
+
+    # Try to determine the backend that we're printing to
+    if backend_name is None:
+        backend_name = backends.guess_backend_name(device_url)
+        assert backend_name is not None
+
+    # If we have no model, then try to determine the model that we're printing
+    # to
+    if model_name is None:
+        model_names = set()
+        for device_info in backends.backend_class(backend_name).discover(
+            device_url
+        ):
+            model_names.add(device_info.model)
+        if len(model_names) == 1:
+            model_name = next(iter(model_names))
+
+    if model_name is None:
+        raise exceptions.BrotherQLError(
+            "Could not determine the model of printer we're printing to. "
+            "Please explicitly specify the model using the -m/--model option."
+        )
+
+    # Convert the model name into an internal model reference
+    model = None
+    for m in models.ALL_MODELS:
+        if _normalise(model_name) == _normalise(m.name):
+            model = m
+            break
+    if model is None:
+        raise exceptions.BrotherQLError(
+            f"Model {model_name!r} is not supported."
+        )
+
+    # Instantiate the backend
+    backend = backends.backend_factory(backend_name, device_url)
+
+    # Return the instantiated
+    return backend, model
 
 
 def _use_colour() -> bool:
-    import os
-    import sys
-
     # Do not use colour if the "colorlog" package is not installed
     if colorlog is None:
         return False
@@ -128,8 +357,8 @@ def _setup_logging(level: int = logging.INFO):
                 },
             )
         )
-        logger.setLevel(level)
-        logger.addHandler(handler)
+        logging.root.setLevel(level)
+        logging.root.addHandler(handler)
     else:
         logging.basicConfig(level=level, format="[%(levelname)-5s] %(message)s")
 
@@ -146,29 +375,28 @@ def _setup_logging(level: int = logging.INFO):
 @click.option(
     "-b",
     "--backend",
-    type=click.Choice(backends.available_backends),
-    default="auto",
+    type=click.Choice(backends.ALL_BACKEND_NAMES),
+    default=None,
     help="Printer backend. One of "
-    f"{{{', '.join(backends.available_backends)}}}. "
-    "Default is `auto`.",
+    f"{{{', '.join(['auto'] + backends.ALL_BACKEND_NAMES)}}}. "
+    "Auto-detects backend if none is given.",
     envvar="BROTHER_LABEL_BACKEND",
+)
+@click.option(
+    "-m",
+    "--model",
+    type=str,
+    default=None,
+    help="Printer model name (such as `QL-600`). Use `auto` to auto-detect.",
+    envvar="BROTHER_LABEL_MODEL",
 )
 @click.option(
     "-d",
     "--device",
     type=str,
     default=None,
-    help="Printer model name (such as `QL-600`). Leave blank to "
-    "detect automatically.",
-    envvar="BROTHER_LABEL_MODEL",
-)
-@click.option(
-    "-t",
-    "--target",
-    type=str,
-    default=None,
-    envvar="BROTHER_LABEL_TARGET",
-    help="The identifier for the printer. Leave blank to use the "
+    envvar="BROTHER_LABEL_DEVICE",
+    help="The device URL for the printer. Leave blank to use the "
     "first detected printer. This could be a string "
     "like `tcp://192.168.1.21:9100` for a networked printer or "
     "`usb://0x04f9:0x2015/000M6Z401370` for a printer connected "
@@ -177,11 +405,26 @@ def _setup_logging(level: int = logging.INFO):
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug messages.")
 @click.version_option()
 @click.pass_context
-def cli(ctx, backend, device, target, verbose):
+def cli(ctx, backend, model, device, verbose):
+    # Resolve the special "auto" string to `None`. This way the user can
+    # override environment variables.
+    if backend and (backend.lower() == "auto"):
+        backend = None
+    if model and (model.lower() == "auto"):
+        model = None
+    if device and (device.lower() == "auto"):
+        device = None
+
+    # Canonicalize the backend and model name
+    if backend is not None:
+        backend = _resolve_backend_name(backend)
+    if model is not None:
+        model = _resolve_model(model).name
+
     # Copy the options used by all backends into the global "meta" variable
     ctx.meta["backend"] = backend
+    ctx.meta["model"] = model
     ctx.meta["device"] = device
-    ctx.meta["target"] = target
 
     # Enable logging, including coloured level names
     _setup_logging(logging.DEBUG if verbose else logging.INFO)
@@ -195,16 +438,42 @@ def cli(ctx, backend, device, target, verbose):
 @cli.command("discover", help="Automatically discover available printers")
 @click.pass_context
 def discover_cmd(ctx):
-    from brother_label import backends
+    device_infos = _discover(
+        filter_backend_name=ctx.meta["backend"],
+        filter_model_name=ctx.meta["model"],
+    )
 
-    if ctx.meta["backend"]:
-        backend_names = [_resolve_backend_name(ctx.meta["backend"])]
+    n_devices = len(device_infos)
+    n_supported = sum(1 for d in device_infos if d.supported)
+    if not device_infos:
+        raise exceptions.BrotherQLError("No device discovered")
     else:
-        backend_names = [backends.ALL_BACKENDS]
+        logger.info(
+            f"Discovered {n_devices} devices ({n_supported}/{n_devices} are supported)."
+        )
 
-    for backend_name in backend_names:
-        backend = backends.backend_factory(backend_name)
-        backend.discover()
+    header = [
+        "Manufacturer",
+        "Model",
+        "Serial",
+        "Device URL",
+        "Default",
+        "Supported",
+    ]
+    rows = []
+    for i, device_info in enumerate(device_infos):
+        rows.append(
+            [
+                device_info.manufacturer,
+                device_info.model,
+                device_info.serial,
+                device_info.device_url,
+                "✔" if i == 0 else "",
+                "✔" if device_info.supported else "✘",
+            ]
+        )
+    _print_table(sys.stdout, header, rows)
+    sys.stdout.flush()
 
 
 ###############################################################################
@@ -212,52 +481,51 @@ def discover_cmd(ctx):
 ###############################################################################
 
 
-@cli.group(help="Commands for listing available backends, models and targets")
-def info():
+@cli.group(
+    "info", help="Commands for listing available backends, models and targets"
+)
+def info_group():
     pass
 
 
-@info.command("devices", help="Lists known devices/printer models")
+@info_group.command("devices", help="Lists known devices/printer models")
 def info_devices_cmd():
-    from brother_label import devices
-
-    print(" ".join(dev.name for dev in devices.ALL_DEVICES))
+    print(" ".join(model.name for model in models.ALL_MODELS))
 
 
-@info.command(
+@info_group.command(
     "labels",
     help="List label types supported by the selected device or all "
     "label types if no device has been specified",
 )
 @click.pass_context
 def info_labels_cmd(ctx):
-    from brother_label import devices
+    from brother_label import models
     from brother_label.labels import FormFactor
 
-    if ctx.meta["device"]:
-        devs = [_resolve_device(ctx.meta["device"])]
+    if ctx.meta["model"]:
+        ms = [_resolve_model(ctx.meta["model"])]
     else:
-        devs = devices.ALL_DEVICES
+        ms = models.ALL_MODELS
 
-    fmt = "{name:36s} {dots_printable:24s} {identifiers:26s}"
-    print(
-        fmt.format(
-            name="\tName",
-            dots_printable="Printable (dots)",
-            identifiers="Identifiers",
-        )
-    )
-    print("=" * 128)
+    header = [
+        "Name",
+        "Dots (printable)",
+        "Label identifiers",
+    ]
 
-    for device in devs:
-        print("" + device.identifier)
+    for i, model in enumerate(ms):
+        if i:
+            print()
+        print(f"{model.name}:")
 
-        for label in device.labels:
+        rows = []
+        for label in model.labels:
             if label.form_factor in (
                 FormFactor.DIE_CUT,
                 FormFactor.ROUND_DIE_CUT,
             ):
-                dp_fmt = "{0:4d} x {1:d}"
+                dp_fmt = "{0:4d} x {1:4d}"
             elif label.form_factor in (
                 FormFactor.ENDLESS,
                 FormFactor.PTOUCH_ENDLESS,
@@ -266,18 +534,18 @@ def info_labels_cmd(ctx):
             else:
                 dp_fmt = " - unknown - "
 
-            print(
-                fmt.format(
-                    name=f"\t{label.name}",
-                    dots_printable=dp_fmt.format(*label.dots_printable).strip(),
-                    identifiers=", ".join(label.identifiers),
-                )
+            rows.append(
+                [
+                    label.name,
+                    dp_fmt.format(*label.dots_printable),
+                    label.identifiers,
+                ]
             )
 
-        print()
+        _print_table(sys.stdout, header, rows)
 
 
-@info.command("env", help="Prints environment information for debugging")
+@info_group.command("env", help="Prints environment information for debugging")
 @click.pass_context
 def env_cmd(ctx, *args, **kwargs):
     import platform
@@ -331,3 +599,200 @@ def env_cmd(ctx, *args, **kwargs):
         spec = " ".join(req.specs[0]) if req.specs else "any"
         print(fmt.format(req=proj, spec=spec, ins_vers=req_pkg.version))
     print("\n##################\n")
+
+
+###############################################################################
+# Debug commands                                                              #
+###############################################################################
+
+
+@cli.group("debug", help="Printer commands used for debugging")
+def debug_group():
+    pass
+
+
+@debug_group.group("analyze", help="Interprets a raw instruction file")
+@click.argument("instructions", type=click.File("rb"))
+@click.option(
+    "-f",
+    "--filename-format",
+    default="label{counter:04d}.png",
+    type=str,
+    help="Filename format string. Default is: label{counter:04d}.png.",
+)
+def analyze_cmd(instructions: typing.BinaryIO, filename_format: str):
+    from .reader import BrotherQLReader
+
+    br = BrotherQLReader(instructions, filename_fmt=filename_format)
+    br.analyse()
+
+
+@debug_group.command("send", help="Send a raw instruction file to the printer")
+@click.argument("instructions", type=click.File("rb"))
+def send_cmd(ctx, instructions: typing.BinaryIO):
+    # TODO
+    pass
+
+
+###############################################################################
+# Print command                                                               #
+###############################################################################
+
+
+@cli.command("print", help="Prints a label")
+@click.argument(
+    "args",
+    nargs=-1,
+    type=str,
+    metavar="FILE_OR_TEXT [FILE_OR_TEXT] ...",
+)
+@click.option(
+    "-f",
+    "--file",
+    multiple=True,
+    type=str,
+    help="Explicitly prints a file",
+)
+@click.option(
+    "-t",
+    "--text",
+    multiple=True,
+    type=str,
+    help="Explicitly prints a text label",
+)
+@click.option("--no-preview", is_flag=True, help="Disables the print preview.")
+@click.option(
+    "-l",
+    "--label",
+    envvar="BROTHER_QL_LABEL",
+    required=True,
+    help="The label (size, type - die-cut or endless). Run `brother_label "
+    "info labels` for a full list including ideal pixel dimensions.",
+)
+@click.option(
+    "-r",
+    "--rotate",
+    type=click.Choice(("auto", "0", "90", "180", "270")),
+    default="auto",
+    help="Angle in degrees by which to rotate the label (counter clock-wise).",
+)
+@click.option(
+    "--600dpi",
+    "dpi_600",
+    is_flag=True,
+    help="Print with 600x300 dpi available on some models. Provide your image "
+    "as 600x600 dpi; perpendicular to the feeding the image will be "
+    "resized to 300dpi.",
+)
+@click.option(
+    "--fast",
+    is_flag=True,
+    help="Print with low quality (faster). Default is high quality.",
+)
+@click.option(
+    "--borderless",
+    is_flag=True,
+    help="",
+)
+@click.option(
+    "--no-compress",
+    is_flag=True,
+    help="Disable compression.",
+)
+@click.option(
+    "--no-cut",
+    is_flag=True,
+    help="Don't cut the tape after printing the label.",
+)
+@click.option(
+    "--no-resize",
+    is_flag=True,
+    help="Expect the resolution of raster images to exactly match the number "
+    "of dots in the printable area.",
+)
+@click.pass_context
+def print_cmd(ctx, args, file, text, **kwargs):
+    # Ensure that there is at least one render target
+    if (not args) and (not file) and (not text):
+        raise exceptions.BrotherQLError(
+            "Requiring at least one file or text to print"
+        )
+
+    # Instantiate the backend and fetch the model
+    backend, model = _instantiate_backend_and_model(
+        device_url=ctx.meta["device"],
+        backend_name=ctx.meta["backend"],
+        model_name=ctx.meta["model"],
+    )
+
+    # Fetch the correct label
+    label = _fuzzy_match(
+        kwargs["label"], ((id, l) for l in model.labels for id in l.identifiers)
+    )
+
+    logger.info(
+        f"Printing to {backend.device_url!r} "
+        f"(model: {model.name}; label type: {label.name})"
+    )
+
+    # Assemble the render options from the command line parameters
+    # TODO: Move this code somewhere else
+    from brother_label import renderers
+
+    ro = renderers.RenderOptions()
+    ro.rotate = 0 if kwargs["rotate"] == "auto" else int(kwargs["rotate"])
+    ro.auto_rotate = kwargs["rotate"] == "auto"
+    ro.printable_pixels = label.dots_printable
+    ro.device_pixels = label.dots_total
+
+    queue = []
+
+    def append_file_to_queue(filename: str):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in IMAGE_FILE_EXTS:
+            queue.append(
+                renderers.BitmapRenderer(
+                    filename_or_handle=filename, render_options=ro
+                )
+            )
+
+    def append_text_to_queue(text: str):
+        queue.append(renderers.TextRenderer(text=text, render_options=ro))
+
+    # Assemble the render queue
+    for arg in args:
+        # Apply some heuristics to determine whether the given argument is
+        # simple text or an image file.
+        is_file, is_text = False, False
+
+        # The image is a file if it points at an existing file
+        if os.path.isfile(arg):
+            is_file = True
+        elif "." in arg:
+            # The image is text if the extension is not a known image or
+            # document file extension
+            ext = arg.rsplit(".", 1)[-1].lower()
+            if (ext not in IMAGE_FILE_EXTS) and (ext not in DOCUMENT_FILE_EXTS):
+                is_text = True
+        else:
+            is_text = True
+
+        # If the argument is ambiguous, throw an error. Better to be safe than
+        # to be sorry.
+        if (not is_text) and (not is_file):
+            raise exceptions.BrotherQLError(
+                f"Ambiguous argument {arg!r}. Looks like a file, but that file"
+                "does not exist. Explicitly use `--file` or `--text` to"
+                "specify a file or text label"
+            )
+
+        if is_file:
+            append_file_to_queue(arg)
+        elif is_text:
+            append_text_to_queue(arg)
+
+    for t in text:
+        append_text_to_queue(t)
+
+    for f in file:
+        append_file_to_queue(t)

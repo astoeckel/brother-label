@@ -1,4 +1,18 @@
-#!/usr/bin/env python
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner, Andreas Stöckel
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
 Backend to support Brother QL-series printers via PyUSB.
@@ -10,16 +24,17 @@ Install via `pip install pyusb`
 
 from __future__ import unicode_literals
 
-import os.path
+import logging
+import os
+import re
 import time
 import typing
-import logging
-import select
 
 import usb.core
 import usb.util
 
-from brother_label.backends.generic import DeviceInfo, BrotherQLBackendGeneric
+from brother_label.backends.base import BackendBase, DeviceInfo
+from brother_label.exceptions import BrotherQLError
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +42,25 @@ logger = logging.getLogger(__name__)
 # Device discovery routines                                                   #
 ###############################################################################
 
+RE_DEVICE_SPECIFIER = re.compile(
+    r"^(usb://)?0x([0-9A-Fa-f]{4}):0x([0-9A-Fa-f]{4})(/([A-Za-z0-9]+)?)?$"
+)
+
 USB_VENDOR_ID = 0x04F9
 USB_PRINTER_CLASS = 0x7
 
 
 def _fill_in_device_info_backend(device_info: DeviceInfo):
     if device_info.serial:
-        device_info.device_specifier = \
-            f"usb://0x{device_info.usb_vendor_id}:" \
+        device_info.device_url = (
+            f"usb://0x{device_info.usb_vendor_id}:"
             f"0x{device_info.usb_product_id}/{device_info.serial}"
+        )
     else:
-        device_info.device_specifier = \
-            f"usb://0x{device_info.usb_vendor_id}:" \
+        device_info.device_url = (
+            f"usb://0x{device_info.usb_vendor_id}:"
             f"0x{device_info.usb_product_id}"
+        )
 
 
 def _discover_linux_sysfs() -> list[DeviceInfo]:
@@ -82,7 +103,7 @@ def _discover_linux_sysfs() -> list[DeviceInfo]:
         product_id = read_hex_id(dev_product_id_fn)
         if (vendor_id != USB_VENDOR_ID) or (product_id is None):
             logger.debug(
-                f"Skipping {dev_path!r} because the vendor does not match"
+                f"Skipping {dev_path!r} because the vendor ID does not match"
             )
             continue
 
@@ -116,7 +137,7 @@ def _discover_linux_sysfs() -> list[DeviceInfo]:
             "busnum": ("usb_bus_num", True, int),
             "devnum": ("usb_dev_num", True, int),
             "manufacturer": ("manufacturer", False, str),
-            "product": ("device", False, str),
+            "product": ("model", False, str),
             "serial": ("serial", False, str),
         }
         for sysfs_file, (key, req, type_) in sysfs_file_to_info_map.items():
@@ -157,9 +178,7 @@ def _discover_pyusb() -> list[DeviceInfo]:
             if dev.bDeviceClass == usb_class:
                 return True
             for cfg in dev:
-                intf = usb.util.find_descriptor(
-                    cfg, bInterfaceClass=usb_class
-                )
+                intf = usb.util.find_descriptor(cfg, bInterfaceClass=usb_class)
                 if intf is not None:
                     return True
             return False
@@ -206,124 +225,113 @@ def _discover_pyusb() -> list[DeviceInfo]:
 # Actual USB device driver                                                    #
 ###############################################################################
 
-class BrotherQLBackendPyUSB(BrotherQLBackendGeneric):
+
+class BackendPyUSB(BackendBase):
     """
     BrotherQL backend using PyUSB
     """
 
-    def __init__(self, device_specifier):
+    def __init__(self, device_url: str):
         """
-        device_specifier: string or pyusb.core.Device: identifier of the \
-            format usb://idVendor:idProduct/iSerialNumber or pyusb.core.Device instance.
-        """
+        Initializes the PyUSB printer backend. Supports device URLs of the
+        following form:
 
-        self.dev = None
-        self.read_timeout = 10.0  # ms
-        self.write_timeout = 15000.0  # ms
-        # strategy : try_twice or select
-        self.strategy = "try_twice"
-        if isinstance(device_specifier, str):
-            if device_specifier.startswith("usb://"):
-                device_specifier = device_specifier[6:]
-            vendor_product, _, serial = device_specifier.partition("/")
-            vendor, _, product = vendor_product.partition(":")
-            vendor, product = int(vendor, 16), int(product, 16)
-            for result in list_available_devices():
-                printer = result["instance"]
-                if (
-                    printer.idVendor == vendor
-                    and printer.idProduct == product
-                    or (serial and printer.iSerialNumber == serial)
-                ):
-                    self.dev = printer
-                    break
-            if self.dev is None:
-                raise ValueError("Device not found")
-        elif isinstance(device_specifier, usb.core.Device):
-            self.dev = device_specifier
-        else:
-            raise NotImplementedError(
-                "Currently the printer can be specified either via an appropriate string or via a usb.core.Device instance."
-            )
+        ```
+        [usb://]0xVENDOR_ID:0xPRODUCT_ID[/SERIAL]
+        ```
+        """
+        super().__init__(device_url)
+        self._usb_device = None
+        self._usb_ep_in = None
+        self._usb_ep_out = None
+        self._read_timeout_ms: int = 10
+        self._write_timeout_ms: int = 15000
+        self._was_kernel_driver_active: bool = True
+
+    ###########################################################################
+    # Protected functions                                                     #
+    ###########################################################################
+
+    def _do_open(self):
+        # Fetch the underlying USB device
+        self._usb_device = self.device_url_to_usb_device(self.device_url)
 
         # Now we are sure to have self.dev around, start using it:
-
         try:
-            assert self.dev.is_kernel_driver_active(0)
-            self.dev.detach_kernel_driver(0)
-            self.was_kernel_driver_active = True
+            assert self._usb_device.is_kernel_driver_active(0)
+            self._usb_device.detach_kernel_driver(0)
+            self._was_kernel_driver_active = True
         except (NotImplementedError, AssertionError):
-            self.was_kernel_driver_active = False
+            self._was_kernel_driver_active = False
 
-        # set the active configuration. With no arguments, the first configuration will be the active one
-        self.dev.set_configuration()
+        # Set the active configuration. With no arguments, the first
+        # configuration will be the active one.
+        self._usb_device.set_configuration()
 
-        cfg = self.dev.get_active_configuration()
-        intf = usb.util.find_descriptor(cfg, bInterfaceClass=7)
-        assert intf is not None
+        # Find the printer endpoints
+        cfg = self._usb_device.get_active_configuration()
+        intf = usb.util.find_descriptor(cfg, bInterfaceClass=USB_PRINTER_CLASS)
+        if intf is None:
+            raise BrotherQLError(
+                f"Cannot find a printer endpoint for {self._device_url}"
+            )
 
         ep_match_in = (
             lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-                      == usb.util.ENDPOINT_IN
+            == usb.util.ENDPOINT_IN
         )
         ep_match_out = (
             lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-                      == usb.util.ENDPOINT_OUT
+            == usb.util.ENDPOINT_OUT
         )
+        self._usb_ep_in = usb.util.find_descriptor(
+            intf, custom_match=ep_match_in
+        )
+        self._usb_ep_out = usb.util.find_descriptor(
+            intf, custom_match=ep_match_out
+        )
+        if (self._usb_ep_in is None) or (self._usb_ep_out is None):
+            raise BrotherQLError(
+                f"Error getting input/output endpoints for {self._device_url}"
+            )
 
-        ep_in = usb.util.find_descriptor(intf, custom_match=ep_match_in)
-        ep_out = usb.util.find_descriptor(intf, custom_match=ep_match_out)
+    def _do_close(self):
+        usb.util.dispose_resources(self._usb_device)
+        del self._usb_ep_out
+        del self._usb_ep_in
+        if self._was_kernel_driver_active:
+            self._usb_device.attach_kernel_driver(0)
+        del self._usb_device
 
-        assert ep_in is not None
-        assert ep_out is not None
-
-        self.write_dev = ep_out
-        self.read_dev = ep_in
+        self._usb_device = None
+        self._usb_ep_out = None
+        self._usb_ep_in = None
 
     def _raw_read(self, length):
-        # pyusb Device.read() operations return array() type - let's convert it to bytes()
-        return bytes(self.read_dev.read(length))
+        return bytes(self._usb_ep_in.read(length))
 
-    def _read(self, length=32):
-        if self.strategy == "try_twice":
-            data = self._raw_read(length)
-            if data:
-                return bytes(data)
-            else:
-                time.sleep(self.read_timeout / 1000.0)
-                return self._raw_read(length)
-        elif self.strategy == "select":
-            data = b""
-            start = time.time()
-            while (not data) and (
-                time.time() - start < self.read_timeout / 1000.0
-            ):
-                result, _, _ = select.select([self.read_dev], [], [], 0)
-                if self.read_dev in result:
-                    data += self._raw_read(length)
-                if data:
-                    break
-                time.sleep(0.001)
-            if not data:
-                # one last try if still no data:
-                return self._raw_read(length)
-            else:
-                return data
+    def _do_read(self, length):
+        data = self._raw_read(length)
+        if data:
+            return bytes(data)
         else:
-            raise NotImplementedError("Unknown strategy")
+            time.sleep(self._read_timeout_ms / 1000.0)
+            return self._raw_read(length)
 
-    def _write(self, data):
-        self.write_dev.write(data, int(self.write_timeout))
+    def _do_write(self, data):
+        self._usb_ep_out.write(data, self._write_timeout_ms)
 
-    def _dispose(self):
-        usb.util.dispose_resources(self.dev)
-        del self.write_dev, self.read_dev
-        if self.was_kernel_driver_active:
-            self.dev.attach_kernel_driver(0)
-        del self.dev
+    ###########################################################################
+    # Static methods                                                          #
+    ###########################################################################
 
     @staticmethod
-    def discover() -> list[DeviceInfo]:
+    def discover(device_url: typing.Optional[str] = None) -> list[DeviceInfo]:
+        # If a URL is given, then we first need to parse that and then match
+        # it against all discovered devices.
+        if device_url:
+            return list(BackendPyUSB.device_url_to_device_infos(device_url))
+
         # Try both the "Linux sysfs" and "pyusb" method to discover attached
         # devices
         device_infos = [
@@ -350,7 +358,43 @@ class BrotherQLBackendPyUSB(BrotherQLBackendGeneric):
 
         return list(device_map.values())
 
+    @staticmethod
+    def parse_device_url(device_specifier: str):
+        vendor_id, product_id, serial_id = None, None, None
+        if (match := RE_DEVICE_SPECIFIER.match(device_specifier)) is not None:
+            vendor_id = match.groups()[1]
+            product_id = match.groups()[2]
+            serial_id = match.groups()[4]
+        return vendor_id.lower(), product_id.lower(), serial_id
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    print(BrotherQLBackendPyUSB.discover())
+    @classmethod
+    def device_url_to_device_infos(
+        cls, device_url: str
+    ) -> typing.Iterable[DeviceInfo]:
+        vendor_id, product_id, serial_id = cls.parse_device_url(device_url)
+        for device_info in cls.discover():
+            if vendor_id and (device_info.usb_vendor_id != vendor_id):
+                continue
+            if product_id and (device_info.usb_product_id != product_id):
+                continue
+            if serial_id and (device_info.serial != serial_id):
+                continue
+            yield device_info
+
+    @classmethod
+    def device_url_to_usb_device(cls, device_url: str) -> usb.core.Device:
+        printer: typing.Optional[usb.core.Device] = None
+        for device_info in cls.device_url_to_device_infos(device_url):
+            if printer:
+                logger.warning(
+                    f"Multiple printers match {device_url!r}, "
+                    f"using first one!"
+                )
+            else:
+                assert isinstance(device_info.handle, usb.core.Device)
+                printer = device_info.handle
+
+        if printer is None:
+            raise BrotherQLError(f"Cannot find printer {device_url!r}!")
+
+        return printer

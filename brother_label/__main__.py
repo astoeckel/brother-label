@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import logging
+
 from brother_label.cli_new import cli
 from brother_label.exceptions import BrotherQLError
 
@@ -25,7 +27,13 @@ def main():
         cli()
         sys.exit(0)
     except BrotherQLError as e:
-        logger.error(e.args[0])
+        logging.error(e.args[0])
+        sys.exit(1)
+    except PermissionError as e:
+        logging.error(e.args[0])
+        sys.exit(1)
+    except FileNotFoundError as e:
+        logging.error(f"File not found: {e.args[0]}")
         sys.exit(1)
 
 

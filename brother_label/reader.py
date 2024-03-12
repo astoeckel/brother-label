@@ -1,8 +1,23 @@
-#!/usr/bin/env python
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import io
 import logging
 import struct
+import typing
 from builtins import bytes
 
 from PIL import Image
@@ -12,28 +27,52 @@ logger = logging.getLogger(__name__)
 
 OPCODES = {
     # signature              name    following bytes   description
-    b'\x00':                 ("preamble",       -1, "Preamble, 200-300x 0x00 to clear comamnd buffer"),
-    b'\x4D':                 ("compression",     1, ""),
-    b'\x67':                 ("raster QL",         -1, ""),
-    b'\x47':                 ("raster P-touch",    -1, ""),
-    b'\x77':                 ("2-color raster QL", -1, ""),
-    b'\x5a':                 ("zero raster",     0, "empty raster line"),
-    b'\x0C':                 ("print",           0, "print intermediate page"),
-    b'\x1A':                 ("print",           0, "print final page"),
-    b'\x1b\x40':             ("init",            0, "initialization"),
-    b'\x1b\x69\x61':         ("mode setting",    1, ""),
-    b'\x1b\x69\x21':         ("automatic status",1, ""),
-    b'\x1b\x69\x7A':         ("media/quality",  10, "print-media and print-quality"),
-    b'\x1b\x69\x4D':         ("various",         1, "Auto cut flag in bit 7"),
-    b'\x1b\x69\x41':         ("cut-every",       1, "cut every n-th page"),
-    b'\x1b\x69\x4B':         ("expanded",        1, ""),
-    b'\x1b\x69\x64':         ("margins",         2, ""),
-    b'\x1b\x69\x55\x77\x01': ('amedia',        127, "Additional media information command"),
-    b'\x1b\x69\x55\x4A':     ('jobid',          14, "Job ID setting command"),
-    b'\x1b\x69\x58\x47':     ("request_config",  0, "Request transmission of .ini config file of printer"),
-    b'\x1b\x69\x6B\x63':     ("number_of_copies",  2, "Internal specification commands"),
-    b'\x1b\x69\x53':         ('status request',  0, "A status information request sent to the printer"),
-    b'\x80\x20\x42':         ('status response',29, "A status response received from the printer"),
+    b"\x00": (
+        "preamble",
+        -1,
+        "Preamble, 200-300x 0x00 to clear comamnd buffer",
+    ),
+    b"\x4D": ("compression", 1, ""),
+    b"\x67": ("raster QL", -1, ""),
+    b"\x47": ("raster P-touch", -1, ""),
+    b"\x77": ("2-color raster QL", -1, ""),
+    b"\x5a": ("zero raster", 0, "empty raster line"),
+    b"\x0C": ("print", 0, "print intermediate page"),
+    b"\x1A": ("print", 0, "print final page"),
+    b"\x1b\x40": ("init", 0, "initialization"),
+    b"\x1b\x69\x61": ("mode setting", 1, ""),
+    b"\x1b\x69\x21": ("automatic status", 1, ""),
+    b"\x1b\x69\x7A": ("media/quality", 10, "print-media and print-quality"),
+    b"\x1b\x69\x4D": ("various", 1, "Auto cut flag in bit 7"),
+    b"\x1b\x69\x41": ("cut-every", 1, "cut every n-th page"),
+    b"\x1b\x69\x4B": ("expanded", 1, ""),
+    b"\x1b\x69\x64": ("margins", 2, ""),
+    b"\x1b\x69\x55\x77\x01": (
+        "amedia",
+        127,
+        "Additional media information command",
+    ),
+    b"\x1b\x69\x55\x4A": ("jobid", 14, "Job ID setting command"),
+    b"\x1b\x69\x58\x47": (
+        "request_config",
+        0,
+        "Request transmission of .ini config file of printer",
+    ),
+    b"\x1b\x69\x6B\x63": (
+        "number_of_copies",
+        2,
+        "Internal specification commands",
+    ),
+    b"\x1b\x69\x53": (
+        "status request",
+        0,
+        "A status information request sent to the printer",
+    ),
+    b"\x80\x20\x42": (
+        "status response",
+        29,
+        "A status response received from the printer",
+    ),
 }
 
 dot_widths = {
@@ -258,10 +297,16 @@ def merge_specific_instructions(chunks, join_preamble=True, join_raster=True):
     return new_instructions
 
 
-class BrotherQLReader(object):
-    DEFAULT_FILENAME_FMT = "label{counter:04d}.png"
+DEFAULT_FILENAME_FMT = "label{counter:04d}.png"
 
-    def __init__(self, brother_file):
+
+class BrotherQLReader(object):
+    def __init__(
+        self,
+        brother_file: typing.BinaryIO,
+        *,
+        filename_fmt: str = DEFAULT_FILENAME_FMT,
+    ):
         if type(brother_file) in (str,):
             brother_file = io.open(brother_file, "rb")
         self.brother_file = brother_file
@@ -274,7 +319,7 @@ class BrotherQLReader(object):
         self.two_color_printing = False
         self.cut_at_end = False
         self.high_resolution_printing = False
-        self.filename_fmt = self.DEFAULT_FILENAME_FMT
+        self.filename_fmt = filename_fmt
 
     def analyse(self):
         instructions = self.brother_file.read()

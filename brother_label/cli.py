@@ -10,7 +10,7 @@ import click
 
 # imports from this very package
 from .backends import available_backends
-from .devices import BrotherDeviceManager
+from .models import BrotherDeviceManager
 
 logger = logging.getLogger("brother_label")
 

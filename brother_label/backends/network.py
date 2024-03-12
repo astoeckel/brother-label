@@ -1,94 +1,91 @@
-#!/usr/bin/env python
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner, Andreas Stöckel
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Backend to support Brother QL-series printers via network.
-Works cross-platform.
+Backend for printing to a network printer.
 """
 
-from __future__ import unicode_literals
-
-import select
 import socket
-import time
-from builtins import str
+import urllib.parse
 
-from .generic import BrotherQLBackendGeneric
+from brother_label.backends.base import BackendBase
+from brother_label.exceptions import BrotherQLError
 
 
-class BrotherQLBackendNetwork(BrotherQLBackendGeneric):
+class BackendNetwork(BackendBase):
     """
     BrotherQL backend using the Linux Kernel USB Printer Device Handles
     """
 
-    def __init__(self, device_specifier):
+    def __init__(self, device_url):
         """
-        device_specifier: string or os.open(): identifier in the \
-            format file:///dev/usb/lp0 or os.open() raw device handle.
+        Opens a printer on the network. The given device URL must be of the
+        form "tcp://HOST:PORT".
         """
+        super().__init__(device_url)
+        self._socket = None
+        self._write_timeout_s = 10.0
 
-        self.read_timeout = 0.01
-        # strategy : try_twice, select or socket_timeout
-        self.strategy = "socket_timeout"
-        if isinstance(device_specifier, str):
-            if device_specifier.startswith("tcp://"):
-                device_specifier = device_specifier[6:]
-            host, _, port = device_specifier.partition(":")
-            if port:
-                port = int(port)
-            else:
-                port = 9100
-            # try:
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.s.connect((host, port))
-            # except OSError as e:
-            #    raise ValueError('Could not connect to the device.')
-            if self.strategy == "socket_timeout":
-                self.s.settimeout(self.read_timeout)
-            elif self.strategy == "try_twice":
-                self.s.settimeout(self.read_timeout)
-            else:
-                self.s.settimeout(0)
+    @property
+    def supports_read(self):
+        # Technically the network backend supports reading, but we're never
+        # using that when communicating with the printer; for some reason the
+        # printer never sends anything on the return channel.
+        return False
 
-        elif isinstance(device_specifier, int):
-            self.dev = device_specifier
-        else:
-            raise NotImplementedError(
-                "Currently the printer can be specified either via an appropriate string or via an os.open() handle."
+    ###########################################################################
+    # Protected functions                                                     #
+    ###########################################################################
+
+    def _do_open(self):
+        # Use urllib to parse the given URL; this is required because correctly
+        # separating a port number and an IPv6 address is tricky.
+        device_url = self.device_url
+        if not "//" in device_url:
+            device_url = f"tcp://{device_url}"
+        url = urllib.parse.urlparse(device_url)
+
+        # Ensure that no weird protocol or pathwas requested
+        if url.scheme != "tcp":
+            raise BrotherQLError(
+                f"Unsupported URL scheme {url.scheme!r}. The `network` "
+                "backend only supports the `tcp://` scheme"
+            )
+        if url.path and url.path != "/":
+            raise BrotherQLError(
+                f"Unsupported URL {device_url}. The `network` backend only "
+                "supports URLs of the form `tcp://HOST:PORT`"
             )
 
-    def _write(self, data):
-        self.s.settimeout(10)
-        self.s.sendall(data)
-        self.s.settimeout(self.read_timeout)
+        # Fetch the port and the hostname
+        host = url.hostname
+        port = url.port
+        if not port:
+            port = 9100
 
-    def _read(self, length=32):
-        if self.strategy in ("socket_timeout", "try_twice"):
-            if self.strategy == "socket_timeout":
-                tries = 1
-            if self.strategy == "try_twice":
-                tries = 2
-            for i in range(tries):
-                try:
-                    data = self.s.recv(length)
-                    return data
-                except socket.timeout:
-                    pass
-            return b""
-        elif self.strategy == "select":
-            data = b""
-            start = time.time()
-            while (not data) and (time.time() - start < self.read_timeout):
-                result, _, _ = select.select([self.s], [], [], 0)
-                if self.s in result:
-                    data += self.s.recv(length)
-                if data:
-                    break
-                time.sleep(0.001)
-            return data
-        else:
-            raise NotImplementedError("Unknown strategy")
+        # Create a client socket
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._socket.connect((host, port))
+        self._socket.settimeout(self._write_timeout_s)
 
-    def _dispose(self):
-        self.s.shutdown(socket.SHUT_RDWR)
-        self.s.close()
+    def _do_close(self):
+        self._socket.shutdown(socket.SHUT_RDWR)
+        self._socket.close()
+        self._socket = None
+
+    def _do_write(self, data):
+        self._socket.sendall(data)

@@ -1,61 +1,108 @@
-import string
-from typing import Tuple
+# Brother Label Printer User-Space Driver and Printing Utility
+# Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner, Andreas Stöckel
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import typing
+from dataclasses import dataclass
 
-from attr import attrib, attrs
-from .labels import Color, FormFactor, Label
+from brother_label.labels import Color, FormFactor, Label
 
 
-@attrs
-class BrotherDevice(object):
+@dataclass
+class Model(object):
     """
     This class represents a printer model. All specifics of a certain model
     and the opcodes it supports should be contained in this class.
     """
 
-    #: A string identifier given to each model implemented. Eg. 'QL-500'.
-    identifier = attrib(type=str)
-    #: Minimum and maximum number of rows or 'dots' that can be printed.
-    #: Together with the dpi this gives the minimum and maximum length
-    #: for continuous tape printing.
-    min_max_length_dots = attrib(type=Tuple[int, int])
-    #: The minimum and maximum amount of feeding a label
-    min_max_feed = attrib(type=Tuple[int, int], default=(35, 1500))
-    number_bytes_per_row = attrib(type=int, default=90)
-    #: The required additional offset from the right side
-    additional_offset_r = attrib(type=int, default=0)
-    #: Support for the 'mode setting' opcode
-    mode_setting = attrib(type=bool, default=True)
-    #: Model has a cutting blade to automatically cut labels
-    cutting = attrib(type=bool, default=True)
-    #: Model has support for the 'expanded mode' opcode.
-    #: (So far, all models that have cutting support do).
-    expanded_mode = attrib(type=bool, default=True)
-    #: Model has support for compressing the transmitted raster data.
-    #: Some models with only USB connectivity don't support compression.
-    compression = attrib(type=bool, default=True)
-    #: Support for two color printing (black/red/white)
-    #: available only on some newer models.
-    two_color = attrib(type=bool, default=False)
-    #: Number of NULL bytes needed for the invalidate command.
-    num_invalidate_bytes = attrib(type=int, default=200)
+    name: str
+    """
+    A string identifier given to each model implemented. Eg. 'QL-500'.
+    """
 
-    def __attrs_post_init__(self) -> None:
-        self.labels_by_id = {}
+    min_max_length_dots: tuple[int, int]
+    """
+    Minimum and maximum number of rows or 'dots' that can be printed.
+    Together with the dpi this gives the minimum and maximum length
+    for continuous tape printing.
+    """
 
-        for label in self.labels:
-            for identifier in label.identifiers:
-                self.labels_by_id[identifier] = label
+    usb_product_id: int = 0x0000
+    """
+    USB product ID of the printer. Null indicates that the product ID is
+    unknown.
+    """
+
+    usb_vendor_id: int = 0x04F9
+    """
+    USB vendor ID. The default id is for "Brother Industries, Ltd".
+    """
+
+    min_max_feed: tuple[int, int] = (35, 100)
+    """
+    The minimum and maximum amount of feeding a label.
+    """
+
+    number_bytes_per_row: int = 90
+    """
+    Number of bytes used to encode a raster line.
+    """
+
+    additional_offset_r: int = 0
+    """
+    Required additional offset from the right side.
+    """
+
+    supports_mode_setting: bool = True
+    """
+    Flag indicating whether the device supports the "mode setting" opcode.
+    """
+
+    supports_cutting: bool = True
+    """
+    Flag indicating whether the device supports automatically cutting the tape.
+    """
+
+    supports_expanded_mode: bool = True
+    """
+    Model has support for the 'expanded mode' opcode.
+    (So far, all models that have cutting support do).
+    """
+
+    supports_compression: bool = True
+    """
+    Model has support for compressing the transmitted raster data.
+    Some models with only USB connectivity don't support compression.
+    """
+
+    supports_two_color: bool = False
+    """
+    Support for two color printing (black/red/white)
+    available only on some newer models.
+    """
+
+    num_invalidate_bytes: int = 200
+    """
+    Number of NULL bytes needed for the invalidate command.
+    """
 
     @property
-    def labels(self):
+    def labels(self) -> list[Label]:
         return []
 
-    @property
-    def name(self):
-        return self.identifier
 
-
-class BrotherDeviceQL(BrotherDevice):
+class ModelQL(Model):
     @property
     def labels(self):
         return super().labels + [
@@ -259,7 +306,7 @@ class BrotherDeviceQL(BrotherDevice):
         ]
 
 
-class BrotherDeviceQL10(BrotherDeviceQL):
+class ModelQL10(ModelQL):
     @property
     def labels(self):
         return super().labels + [
@@ -302,7 +349,7 @@ class BrotherDeviceQL10(BrotherDeviceQL):
         ]
 
 
-class BrotherDeviceQL11(BrotherDeviceQL10):
+class ModelQL11(ModelQL10):
     @property
     def labels(self):
         return super().labels + [
@@ -328,7 +375,7 @@ class BrotherDeviceQL11(BrotherDeviceQL10):
         ]
 
 
-class BrotherDevicePT(BrotherDevice):
+class ModelPT(Model):
     @property
     def labels(self):
         return super().labels + [
@@ -372,7 +419,7 @@ class BrotherDevicePT(BrotherDevice):
         ]
 
 
-class BrotherDevicePTE(BrotherDevice):
+class ModelPTE(Model):
     @property
     def labels(self):
         return super().labels + [
@@ -425,81 +472,149 @@ class BrotherDevicePTE(BrotherDevice):
         ]
 
 
-ALL_DEVICES: list[BrotherDevice] = [
-    BrotherDeviceQL(
+ALL_MODELS: list[Model] = [
+    ModelQL(
         "QL-500",
         (295, 11811),
-        compression=False,
-        mode_setting=False,
-        expanded_mode=False,
-        cutting=False,
+        supports_compression=False,
+        supports_mode_setting=False,
+        supports_expanded_mode=False,
+        supports_cutting=False,
+        usb_product_id=0x2015,
     ),
-    BrotherDeviceQL(
-        "QL-550", (295, 11811), compression=False, mode_setting=False
+    ModelQL(
+        "QL-550",
+        (295, 11811),
+        supports_compression=False,
+        supports_mode_setting=False,
+        usb_product_id=0x2016,
     ),
-    BrotherDeviceQL(
-        "QL-560", (295, 11811), compression=False, mode_setting=False
+    ModelQL(
+        "QL-560",
+        (295, 11811),
+        supports_compression=False,
+        supports_mode_setting=False,
+        usb_product_id=0x2027,
     ),
-    BrotherDeviceQL(
-        "QL-570", (150, 11811), compression=False, mode_setting=False
+    ModelQL(
+        "QL-570",
+        (150, 11811),
+        supports_compression=False,
+        supports_mode_setting=False,
+        usb_product_id=0x2028,
     ),
-    BrotherDeviceQL("QL-580N", (150, 11811)),
-    BrotherDeviceQL("QL-600", (150, 11811)),
-    BrotherDeviceQL("QL-650TD", (295, 11811)),
-    BrotherDeviceQL(
-        "QL-700", (150, 11811), compression=False, mode_setting=False
+    ModelQL(
+        "QL-580N",
+        (150, 11811),
+        usb_product_id=0x2029,
     ),
-    BrotherDeviceQL("QL-710W", (150, 11811)),
-    BrotherDeviceQL("QL-720NW", (150, 11811)),
-    BrotherDeviceQL(
+    ModelQL(
+        "QL-600",
+        (150, 11811),
+        usb_product_id=0x20C0,
+    ),
+    ModelQL(
+        "QL-650TD",
+        (295, 11811),
+        usb_product_id=0x201B,
+    ),
+    ModelQL(
+        "QL-700",
+        (150, 11811),
+        supports_compression=False,
+        supports_mode_setting=False,
+        usb_product_id=0x2042,
+    ),
+    ModelQL(
+        "QL-710W",
+        (150, 11811),
+        usb_product_id=0x2043,
+    ),
+    ModelQL(
+        "QL-720NW",
+        (150, 11811),
+        usb_product_id=0x2044,
+    ),
+    ModelQL(
         "QL-800",
         (150, 11811),
-        two_color=True,
-        compression=False,
+        supports_two_color=True,
+        supports_compression=False,
         num_invalidate_bytes=400,
+        usb_product_id=0x209B,
     ),
-    BrotherDeviceQL(
-        "QL-810W", (150, 11811), two_color=True, num_invalidate_bytes=400
+    ModelQL(
+        "QL-810W",
+        (150, 11811),
+        supports_two_color=True,
+        num_invalidate_bytes=400,
+        usb_product_id=0x209C,
     ),
-    BrotherDeviceQL(
-        "QL-820NWB", (150, 11811), two_color=True, num_invalidate_bytes=400
+    ModelQL(
+        "QL-820NWB",
+        (150, 11811),
+        supports_two_color=True,
+        num_invalidate_bytes=400,
+        usb_product_id=0x209D,
     ),
     # QL 10 Series
-    BrotherDeviceQL10(
+    ModelQL10(
         "QL-1050",
         (295, 35433),
         number_bytes_per_row=162,
         additional_offset_r=44,
+        usb_product_id=0x2020,
     ),
-    BrotherDeviceQL10(
+    ModelQL10(
         "QL-1060N",
         (295, 35433),
         number_bytes_per_row=162,
         additional_offset_r=44,
+        usb_product_id=0x202A,
     ),
     # QL 11 Series
-    BrotherDeviceQL11(
+    ModelQL11(
         "QL-1100",
         (301, 35434),
         number_bytes_per_row=162,
         additional_offset_r=44,
+        usb_product_id=0x20A7,
     ),
-    BrotherDeviceQL11(
+    ModelQL11(
         "QL-1100NWB",
         (301, 35434),
         number_bytes_per_row=162,
         additional_offset_r=44,
+        usb_product_id=0x20A8,
     ),
-    BrotherDeviceQL11(
+    ModelQL11(
         "QL-1115NWB",
         (301, 35434),
         number_bytes_per_row=162,
         additional_offset_r=44,
+        usb_product_id=0x20AC,
     ),
     # PT Series
-    BrotherDevicePT("PT-P750W", (31, 14172), number_bytes_per_row=16),
-    BrotherDevicePT("PT-P900W", (57, 28346), number_bytes_per_row=70),
-    BrotherDevicePT("PT-P950NW", (57, 28346), number_bytes_per_row=70),
+    ModelPT(
+        "PT-P750W",
+        (31, 14172),
+        number_bytes_per_row=16,
+    ),
+    ModelPT(
+        "PT-P900W",
+        (57, 28346),
+        number_bytes_per_row=70,
+    ),
+    ModelPT(
+        "PT-P950NW",
+        (57, 28346),
+        number_bytes_per_row=70,
+    ),
     # PTE Series
-    BrotherDevicePTE("PT-E550W", (31, 14172), number_bytes_per_row=16),
+    ModelPTE(
+        "PT-E550W",
+        (31, 14172),
+        number_bytes_per_row=16,
+        usb_product_id=0x2060,
+    ),
 ]

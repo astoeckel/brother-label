@@ -21,17 +21,19 @@ does that by calling the GhostScript executable in the background.
 
 import io
 import logging
-import os
+
+# import os
 import re
 import shutil
 import subprocess
-import tempfile
-import typing
 
-from PIL import Image
+# import tempfile
+# import typing
+
+# from PIL import Image
 
 
-def find_exe(exe: str) -> str:
+def _find_exe(exe: str) -> str:
     # Use shutil to search for executables to resolve the environment just
     # like the shell would.
     path = shutil.which(exe)
@@ -40,7 +42,7 @@ def find_exe(exe: str) -> str:
     return path
 
 
-def run_subprocess(*args, **kwargs) -> str:
+def _run_subprocess(*args, **kwargs) -> str:
     logging.debug(f"Executing {args!r}")
     res = subprocess.run(
         args,
@@ -59,8 +61,8 @@ def extract_pdf_page_sizes_in_pt(
 ) -> list[tuple[float, float]]:
     # List the number of pages and their sizes (in pt) from the PDF. See
     # https://stackoverflow.com/a/52644056
-    res = run_subprocess(
-        find_exe("gs"),
+    res = _run_subprocess(
+        _find_exe("gs"),
         "-dQUIET",
         "-dNODISPLAY",
         "-dNOSAFER",
@@ -99,8 +101,8 @@ def convert_pdf_page_to_png(
     page_idx: int,
     dpi: float,
 ):
-    run_subprocess(
-        find_exe("gs"),
+    _run_subprocess(
+        _find_exe("gs"),
         "-o",
         png_filename,
         "-sDEVICE=pnggray",
@@ -122,80 +124,80 @@ def is_supported_file(f: io.BufferedReader) -> bool:
     return False
 
 
-def rasterize(
-    f: io.BufferedReader,
-    target_width_px: int,
-    target_height_px: typing.Optional[int] = None,
-) -> typing.List[Image.Image]:
-    """
-    Converts the given PDF or PS document into a series of rasterized images.
-    """
-    with tempfile.NamedTemporaryFile(suffix=".pdf") as f_src:
-        f_src.write(f.read())
-        f_src.flush()
-
-        if target_height_px is not None and target_height_px <= 0:
-            target_height_px = None
-
-        images: typing.List[Image.Image] = []
-
-        # Determine the number of pages, and size of each page in the source file
-        page_sizes_pt = extract_pdf_page_sizes_in_pt(f_src.name)
-        for page_idx, (page_width_pt, page_height_pt) in enumerate(
-            page_sizes_pt
-        ):
-            # Determine the DPI that we need to use to fit onto the target image
-            dpi_width = int(
-                (target_width_px * 72 + 0.5 * page_width_pt) / page_width_pt
-            )
-            if target_height_px is None:
-                dpi = dpi_width
-            else:
-                dpi_height = int(
-                    (target_height_px * 72 + 0.5 * page_height_pt)
-                    / page_height_pt
-                )
-                dpi = min(dpi_width, dpi_height)
-
-            with tempfile.NamedTemporaryFile(
-                suffix=".png", delete=False
-            ) as f_tar:
-                try:
-                    # Convert the page to a PNG
-                    convert_pdf_page_to_png(
-                        pdf_filename=f_src.name,
-                        png_filename=f_tar.name,
-                        page_idx=page_idx,
-                        dpi=dpi,
-                    )
-
-                    # Compose the image onto a PIL canvas of the desired size; this
-                    # is because GhostScript tends to produce images that do not
-                    # quite match our desired output size; we have to add a pixel
-                    # here or there.
-                    with Image.open(f_tar.name) as im_page:
-                        if target_height_px is None:
-                            target_height_px = im_page.height
-                        im_tar = Image.new(
-                            "L", (target_width_px, target_height_px), 255
-                        )
-                        im_tar.paste(im_page)
-                        images.append(im_tar)
-
-                finally:
-                    os.unlink(f_tar.name)
-
-    return images
-
-
-def iterate_pages(
-    images: typing.Union[str, io.BufferedReader],
-    target_width_px: int,
-    target_height_px: typing.Optional[int] = None,
-) -> typing.Iterator[typing.Union[str, Image.Image]]:
-    for image in images:
-        if isinstance(image, io.BufferedReader) and is_supported_file(image):
-            for subimage in rasterize(image, target_width_px, target_height_px):
-                yield subimage
-        else:
-            yield image
+# def rasterize(
+#     f: io.BufferedReader,
+#     target_width_px: int,
+#     target_height_px: typing.Optional[int] = None,
+# ) -> typing.List[Image.Image]:
+#     """
+#     Converts the given PDF or PS document into a series of rasterized images.
+#     """
+#     with tempfile.NamedTemporaryFile(suffix=".pdf") as f_src:
+#         f_src.write(f.read())
+#         f_src.flush()
+#
+#         if target_height_px is not None and target_height_px <= 0:
+#             target_height_px = None
+#
+#         images: typing.List[Image.Image] = []
+#
+#         # Determine the number of pages, and size of each page in the source file
+#         page_sizes_pt = extract_pdf_page_sizes_in_pt(f_src.name)
+#         for page_idx, (page_width_pt, page_height_pt) in enumerate(
+#             page_sizes_pt
+#         ):
+#             # Determine the DPI that we need to use to fit onto the target image
+#             dpi_width = int(
+#                 (target_width_px * 72 + 0.5 * page_width_pt) / page_width_pt
+#             )
+#             if target_height_px is None:
+#                 dpi = dpi_width
+#             else:
+#                 dpi_height = int(
+#                     (target_height_px * 72 + 0.5 * page_height_pt)
+#                     / page_height_pt
+#                 )
+#                 dpi = min(dpi_width, dpi_height)
+#
+#             with tempfile.NamedTemporaryFile(
+#                 suffix=".png", delete=False
+#             ) as f_tar:
+#                 try:
+#                     # Convert the page to a PNG
+#                     convert_pdf_page_to_png(
+#                         pdf_filename=f_src.name,
+#                         png_filename=f_tar.name,
+#                         page_idx=page_idx,
+#                         dpi=dpi,
+#                     )
+#
+#                     # Compose the image onto a PIL canvas of the desired size; this
+#                     # is because GhostScript tends to produce images that do not
+#                     # quite match our desired output size; we have to add a pixel
+#                     # here or there.
+#                     with Image.open(f_tar.name) as im_page:
+#                         if target_height_px is None:
+#                             target_height_px = im_page.height
+#                         im_tar = Image.new(
+#                             "L", (target_width_px, target_height_px), 255
+#                         )
+#                         im_tar.paste(im_page)
+#                         images.append(im_tar)
+#
+#                 finally:
+#                     os.unlink(f_tar.name)
+#
+#     return images
+#
+#
+# def iterate_pages(
+#     images: typing.Union[str, io.BufferedReader],
+#     target_width_px: int,
+#     target_height_px: typing.Optional[int] = None,
+# ) -> typing.Iterator[typing.Union[str, Image.Image]]:
+#     for image in images:
+#         if isinstance(image, io.BufferedReader) and is_supported_file(image):
+#             for subimage in rasterize(image, target_width_px, target_height_px):
+#                 yield subimage
+#         else:
+#             yield image

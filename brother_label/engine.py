@@ -1,10 +1,10 @@
 import logging
 import time
 
-from .backends import backend_factory, guess_backend
-from .backends.network import BrotherQLBackendNetwork
-from .converter import BrotherLabelConverter
+from .backends import backend_factory, guess_backend_name
+from .backends.network import BackendNetwork
 from .reader import interpret_response
+from .renderer import BrotherLabelConverter
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class BrotherLabel(object):
 
         # Backend
         if not backend and target:
-            backend = guess_backend(target) or "linux_kernel"
+            backend = guess_backend_name(target) or "linux_kernel"
 
         if backend:
             backend = backend_factory(backend)
@@ -99,7 +99,7 @@ class BrotherLabel(object):
         if not blocking:
             return status
 
-        if backend == BrotherQLBackendNetwork:
+        if not backend.supports_read:
             """No need to wait for completion. The network backend doesn't support readback."""
             return status
 
