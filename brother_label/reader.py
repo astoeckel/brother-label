@@ -19,6 +19,7 @@ import logging
 import struct
 import typing
 from builtins import bytes
+from collections.abc import Iterator
 
 from PIL import Image
 from PIL.ImageOps import colorize
@@ -150,9 +151,8 @@ RESP_BYTE_NAMES = [
 ]
 
 
-def chunker(data, raise_exception=False):
-    """
-    Breaks data stream (bytes) into a list of bytes objects containing single instructions each.
+def chunker(data: bytes, raise_exception: bool=False) -> Iterator[bytes]:
+    """Break data stream (bytes) into a list of bytes objects containing single instructions each.
 
     Logs warnings for unknown opcodes or raises an exception instead, if raise_exception is set to True.
 
@@ -165,10 +165,10 @@ def chunker(data, raise_exception=False):
             break
         try:
             opcode = match_opcode(data)
-        except:
+        except Exception as err:
             msg = f"unknown opcode starting with {data[0:4].hex()}...)"
             if raise_exception:
-                raise ValueError(msg)
+                raise ValueError(msg) from err
             else:
                 logger.warning(msg)
                 data = data[1:]
@@ -185,12 +185,12 @@ def chunker(data, raise_exception=False):
         instructions.append(data[:num_bytes])
         yield instructions[-1]
         data = data[num_bytes:]
-    # return instructions
 
-
-def match_opcode(data):
+def match_opcode(data: bytes) -> bytes:
+    # TODO: this does not properly throw exceptions in case multiple
+    #       opcodes are found or that no opcode could be detected.
     matching_opcodes = [
-        opcode for opcode in OPCODES.keys() if data.startswith(opcode)
+        opcode for opcode in OPCODES if data.startswith(opcode)
     ]
     assert len(matching_opcodes) == 1
     return matching_opcodes[0]
