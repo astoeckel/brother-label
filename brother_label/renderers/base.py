@@ -25,6 +25,7 @@ import typing
 from dataclasses import dataclass
 
 import PIL.Image
+import PIL.ImageOps
 
 ###############################################################################
 # Data structures                                                             #
@@ -173,6 +174,17 @@ class Renderer:
 
     def __init__(self, *, render_options: RenderOptions):
         self._render_options = render_options
+        self._page_count = None
+
+    @property
+    def page_count(self) -> int:
+        if self._page_count is None:
+            try:
+                self._do_open()
+                self._page_count = self._do_compute_page_count()
+            finally:
+                self._do_close()
+        return self._page_count
 
     @property
     def render_options(self):
@@ -192,7 +204,9 @@ class Renderer:
         try:
             # Iterate over all pages in the document (for images, there is only
             # one page).
-            for page_idx in range(self._do_compute_page_count()):
+            if self._page_count is None:
+                self._page_count = self._do_compute_page_count()
+            for page_idx in range(self._page_count):
                 yield self._render_page(page_idx)
         finally:
             # Free the underlying resource
@@ -214,7 +228,6 @@ class Renderer:
             palette_data.append(int(colour.r * 255))
             palette_data.append(int(colour.g * 255))
             palette_data.append(int(colour.b * 255))
-        palette_data.extend(0 for _ in range(3 * (256 - n)))
 
         # Create a dummy image containing the palette
         palette_image = PIL.Image.new("P", size)
@@ -260,17 +273,15 @@ class Renderer:
 
         # Render the image to the target shape
         src_image = self._do_render(page_idx, PageSize(w, h, dpi))
-        assert src_image.width == w
-        assert src_image.height == h
+        src_image = PIL.ImageOps.invert(src_image)
 
         # Quantize the image using dithering.
         # TODO: Implement thresholding mode, use HSV transformation to split
         #       out the red channel.
         src_image_quant = src_image.quantize(
-            colors=len(ro.palette),
             method=PIL.Image.FASTOCTREE,
             palette=self._get_palette_image(),
-            dither=PIL.Image.FLOYDSTEINBERG,
+            dither=PIL.Image.NONE,
         )
 
         # Create the output image

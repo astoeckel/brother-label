@@ -1,23 +1,21 @@
 [project]
 name = "brother-label"
-version = "3.0"
+version = "4.0"
 description = "Brother label printer interface for QL and PT series printers."
 readme = "README.md"
 authors = [
     { name = "Philipp Klaus", email = "philipp.l.klaus@web.de" },
     { name = "Dean Gardiner", email = "me@dgardiner.net" },
+    { name = "Andreas Stöckel" },
+    { name = "Daniel Stöckel" },
 ]
 license = {text = "GPL"}
 dependencies = [
     "click",
-    "future",
     "packbits",
     "pillow>=3.3.0",
     "pyusb",
-    "attrs",
     "colorlog",
-    "typing;python_version<'3.5'",
-    "enum34;python_version<'3.4'",
 ]
 keywords = [
     "Brother",
@@ -62,7 +60,7 @@ repository = "https://github.com/fuzeman/brother-label"
 
 [tool.black]
 line-length = 80
-target-version = ['py39']
+target-version = ["py39"]
 
 [tool.isort]
 profile = "black"

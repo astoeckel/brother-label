@@ -31,7 +31,7 @@ import time
 import typing
 from builtins import str
 
-from brother_label.backends.base import BackendBase, DeviceInfo
+from brother_label.backends.base import Backend, DeviceInfo
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ RE_LP = re.compile("^lp[0-9]+$")
 RE_DEVICE = re.compile("^(QL-[a-zA-Z0-9]+|PT-[a-zA-Z0-9])$")
 
 
-class BackendLinux(BackendBase):
+class BackendLinux(Backend):
     """
     BrotherQL backend using the Linux Kernel USB Printer Device Handles
     """

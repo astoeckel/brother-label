@@ -333,7 +333,7 @@ class BrotherQLReader(object):
                         self.black_rows = []
                         self.red_rows = []
                     payload = instruction[len(opcode) :]
-                    logger.info(
+                    logger.debug(
                         " {} ({}) --> found! (payload: {})".format(
                             opcode_def[0],
                             hex_format(opcode),
@@ -393,16 +393,18 @@ class BrotherQLReader(object):
                         self.mwidth = instruction[len(opcode) + 2]
                         self.mlength = instruction[len(opcode) + 3] * 256
                         fmt = " media width: {} mm, media length: {} mm, raster no: {} rows"
-                        logger.info(
+                        logger.debug(
                             fmt.format(
                                 self.mwidth, self.mlength, self.raster_no
                             )
                         )
                     if opcode_def[0] == "print":
-                        logger.info(
+                        logger.debug(
                             "Len of black rows: %d", len(self.black_rows)
                         )
-                        logger.info("Len of red   rows: %d", len(self.red_rows))
+                        logger.debug(
+                            "Len of red   rows: %d", len(self.red_rows)
+                        )
 
                         def get_im(rows):
                             if not len(rows):
@@ -458,5 +460,7 @@ class BrotherQLReader(object):
                             counter=self.page_counter
                         )
                         im.save(img_name)
-                        print("Page saved as {}".format(img_name))
+                        logger.debug("Page saved as {}".format(img_name))
                         self.page_counter += 1
+                        self.black_rows = []
+                        self.red_rows = []

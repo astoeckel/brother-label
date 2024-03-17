@@ -9,6 +9,7 @@ The central piece of code in this module is the class
 
 import logging
 import struct
+import typing
 from builtins import bytes
 from io import BytesIO
 
@@ -36,14 +37,13 @@ class BrotherLabelRaster(object):
 
     :param str model: Choose from the list of available models.
 
-    :ivar bytes data: The resulting bytecode with all instructions.
     :ivar bool exception_on_warning: If set to True, an exception is raised if trying to add instruction which are not supported on the selected model. If set to False, the instruction is simply ignored and a warning sent to logging/stderr.
     """
 
-    def __init__(self, device):
-        self.device = device
+    def __init__(self, f: typing.BinaryIO, model):
+        self.model = model
 
-        self.data = b""
+        self.f = f
         self._pquality = True
         self.page_number = 0
         self.cut_at_end = True
@@ -78,11 +78,11 @@ class BrotherLabelRaster(object):
 
     def add_initialize(self):
         self.page_number = 0
-        self.data += b"\x1B\x40"  # ESC @
+        self.f.write(b"\x1B\x40")  # ESC @
 
     def add_status_information(self):
         """Status Information Request"""
-        self.data += b"\x1B\x69\x53"  # ESC i S
+        self.f.write(b"\x1B\x69\x53")  # ESC i S
 
     def add_switch_mode(self):
         """
@@ -90,17 +90,17 @@ class BrotherLabelRaster(object):
         Switch to the raster mode on the printers that support
         the mode change (others are in raster mode already).
         """
-        if not self.device.mode_setting:
+        if not self.model.supports_mode_setting:
             self._unsupported(
                 "Trying to switch the operating mode on a printer that doesn't support the command."
             )
             return
 
-        self.data += b"\x1B\x69\x61\x01"  # ESC i a
+        self.f.write(b"\x1B\x69\x61\x01")  # ESC i a
 
     def add_invalidate(self):
         """clear command buffer"""
-        self.data += b"\x00" * self.device.num_invalidate_bytes
+        self.f.write(b"\x00" * self.model.num_invalidate_bytes)
 
     @property
     def mtype(self):
@@ -135,63 +135,63 @@ class BrotherLabelRaster(object):
         self._pquality = bool(value)
 
     def add_media_and_quality(self, rnumber):
-        self.data += b"\x1B\x69\x7A"  # ESC i z
+        self.f.write(b"\x1B\x69\x7A")  # ESC i z
         valid_flags = 0x80
         valid_flags |= (self._mtype is not None) << 1
         valid_flags |= (self._mwidth is not None) << 2
         valid_flags |= (self._mlength is not None) << 3
         valid_flags |= self._pquality << 6
-        self.data += bytes([valid_flags])
+        self.f.write(bytes([valid_flags]))
         vals = [self._mtype, self._mwidth, self._mlength]
-        self.data += b"".join(b"\x00" if val is None else val for val in vals)
-        self.data += struct.pack("<L", rnumber)
-        self.data += bytes([0 if self.page_number == 0 else 1])
-        self.data += b"\x00"
+        self.f.write(b"".join(b"\x00" if val is None else val for val in vals))
+        self.f.write(struct.pack("<L", rnumber))
+        self.f.write(bytes([0 if self.page_number == 0 else 1]))
+        self.f.write(b"\x00")
         # INFO:  media/quality (1B 69 7A) --> found! (payload: 8E 0A 3E 00 D2 00 00 00 00 00)
 
     def add_autocut(self, autocut=False):
-        if not self.device.cutting:
+        if not self.model.supports_cutting:
             self._unsupported(
                 "Trying to call add_autocut with a printer that doesn't support it"
             )
             return
 
-        self.data += b"\x1B\x69\x4D"  # ESC i M
-        self.data += bytes([autocut << 6])
+        self.f.write(b"\x1B\x69\x4D")  # ESC i M
+        self.f.write(bytes([autocut << 6]))
 
     def add_cut_every(self, n=1):
-        if not self.device.cutting:
+        if not self.model.supports_cutting:
             self._unsupported(
                 "Trying to call add_cut_every with a printer that doesn't support it"
             )
             return
 
-        self.data += b"\x1B\x69\x41"  # ESC i A
-        self.data += bytes([n & 0xFF])
+        self.f.write(b"\x1B\x69\x41")  # ESC i A
+        self.f.write(bytes([n & 0xFF]))
 
     def add_expanded_mode(self):
-        if not self.device.expanded_mode:
+        if not self.model.supports_expanded_mode:
             self._unsupported(
                 "Trying to set expanded mode (dpi/cutting at end) on a printer that doesn't support it"
             )
             return
 
-        if self.two_color_printing and not self.device.two_color:
+        if self.two_color_printing and not self.model.two_color:
             self._unsupported(
                 "Trying to set two_color_printing in expanded mode on a printer that doesn't support it."
             )
             return
 
-        self.data += b"\x1B\x69\x4B"  # ESC i K
+        self.f.write(b"\x1B\x69\x4B")  # ESC i K
         flags = 0x00
         flags |= self.cut_at_end << 3
         flags |= self.dpi_600 << 6
         flags |= self.two_color_printing << 0
-        self.data += bytes([flags])
+        self.f.write(bytes([flags]))
 
     def add_margins(self, dots=0x23):
-        self.data += b"\x1B\x69\x64"  # ESC i d
-        self.data += struct.pack("<H", dots)
+        self.f.write(b"\x1B\x69\x64")  # ESC i d
+        self.f.write(struct.pack("<H", dots))
 
     def add_compression(self, compression=True):
         """
@@ -202,18 +202,18 @@ class BrotherLabelRaster(object):
 
         :param bool compression: Whether compression should be on or off
         """
-        if not self.device.compression:
+        if not self.model.supports_compression:
             self._unsupported(
                 "Trying to set compression on a printer that doesn't support it"
             )
             return
 
         self._compression = compression
-        self.data += b"\x4D"  # M
-        self.data += bytes([compression << 1])
+        self.f.write(b"\x4D")  # M
+        self.f.write(bytes([compression << 1]))
 
     def get_pixel_width(self):
-        return self.device.number_bytes_per_row * 8
+        return self.model.number_bytes_per_row * 8
 
     def add_raster_data(self, image, second_image=None):
         """
@@ -253,7 +253,7 @@ class BrotherLabelRaster(object):
                 if self._compression:
                     row = packbits.encode(row)
                 translen = len(row)  # number of bytes to be transmitted
-                if self.device.identifier.startswith("PT"):
+                if self.model.name.startswith("PT"):
                     file_str.write(b"\x47")
                     file_str.write(bytes([translen % 256, translen // 256]))
                 else:
@@ -264,10 +264,10 @@ class BrotherLabelRaster(object):
                     file_str.write(bytes([translen]))
                 file_str.write(row)
             start += row_len
-        self.data += file_str.getvalue()
+        self.f.write(file_str.getvalue())
 
     def add_print(self, last_page=True):
         if last_page:
-            self.data += b"\x1A"  # 0x1A = ^Z = SUB; here: EOF = End of File
+            self.f.write(b"\x1A")  # 0x1A = ^Z = SUB; here: EOF = End of File
         else:
-            self.data += b"\x0C"  # 0x0C = FF  = Form Feed
+            self.f.write(b"\x0C")  # 0x0C = FF  = Form Feed

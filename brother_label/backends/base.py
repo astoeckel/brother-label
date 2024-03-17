@@ -87,7 +87,7 @@ class DeviceInfo:
     """
 
 
-class BackendBase(object):
+class Backend:
     def __init__(self, device_url: typing.Optional[str]):
         self._device_url = device_url
         self._is_open = False

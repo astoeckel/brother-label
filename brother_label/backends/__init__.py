@@ -16,7 +16,7 @@
 
 import os
 
-from brother_label.backends.base import BackendBase, DeviceInfo
+from brother_label.backends.base import Backend, DeviceInfo
 
 ALL_BACKEND_NAMES = [
     "pyusb",

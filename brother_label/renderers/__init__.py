@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from brother_label.renderers.base import RGB, PageSize, Renderer, RenderOptions
+from brother_label.renderers.base import Renderer, RenderOptions
 from brother_label.renderers.bitmap import BitmapRenderer
 from brother_label.renderers.ghostscript import GhostScriptRenderer
 from brother_label.renderers.text import TextRenderer

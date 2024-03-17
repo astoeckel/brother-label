@@ -20,7 +20,6 @@ being printed.
 """
 
 import dataclasses
-import os.path
 import tkinter
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -28,34 +27,8 @@ import typing
 
 import PIL
 import PIL.ImageTk
-from PIL.Image import Image
 
-
-@dataclasses.dataclass
-class LabelMetadata:
-    """
-    Class describing a single label that is being printed. The metadata contains
-    the label size, margin, and the location of the preview image that should
-    be displayed. We're deliberately not holding the preview image in memory
-    to avoid having too many images open at the same time.
-    """
-
-    label_name: str = ""
-    image_filename: str = ""
-    label_width_mm: float = 0.0
-    label_height_mm: float = 0.0
-    margin_width_mm: float = 0.0
-    margin_height_mm: float = 0.0
-
-    def __bool__(self):
-        return (
-            self.image_filename
-            and (self.label_width_mm >= 0.0)
-            and (self.label_height_mm >= 0.0)
-            and (self.margin_width_mm >= 0.0)
-            and (self.margin_height_mm >= 0.0)
-            and os.path.isfile(self.image_filename)
-        )
+from brother_label.spool import LabelMetadata
 
 
 class LabelPreview(tk.Frame):
@@ -248,6 +221,7 @@ class Gui:
         self,
         label_metadata: typing.Optional[typing.Sequence[LabelMetadata]] = None,
         printer_name: str = "No printer selected",
+        has_print_single: bool = False,
         label_idx=0,
     ):
         # Copy the given label metadata
@@ -307,13 +281,18 @@ class Gui:
         self.lbl_printer = ttk.Label(self.frm_bottom, text=printer_name)
         self.lbl_printer.grid(column=0, row=0, sticky="news")
 
-        self.btn_print_single = tk.Button(
-            self.frm_bottom,
-            text="Print single label",
-            width=15,
-            command=self.print_single_click,
-        )
-        self.btn_print_single.grid(column=1, row=0)
+        c = 1
+        if has_print_single:
+            self.btn_print_single = tk.Button(
+                self.frm_bottom,
+                text="Print single label",
+                width=15,
+                command=self.print_single_click,
+            )
+            self.btn_print_single.grid(column=c, row=0)
+            c += 1
+        else:
+            self.btn_print_single = None
 
         self.btn_print_all = tk.Button(
             self.frm_bottom,
@@ -322,7 +301,8 @@ class Gui:
             **self.default_action_btn_style,
             command=self.print_all_click,
         )
-        self.btn_print_all.grid(column=2, row=0)
+        self.btn_print_all.grid(column=c, row=0)
+        c += 1
 
         self.frm_top.columnconfigure(1, weight=1)
         self.frm_bottom.columnconfigure(0, weight=1)
@@ -347,7 +327,8 @@ class Gui:
             self.btn_prev.configure(state="disabled")
             self.btn_next.configure(state="disabled")
             self.btn_print_all.configure(state="disabled")
-            self.btn_print_single.configure(state="disabled")
+            if self.btn_print_single:
+                self.btn_print_single.configure(state="disabled")
             self.lbl_label_no.configure(text="Label 0 of 0")
             self.lbl_label_name.configure(text="No label loaded")
             self.preview_area.meta = None
@@ -383,7 +364,8 @@ class Gui:
 
         # Enable the print buttons
         self.btn_print_all.configure(state="normal")
-        self.btn_print_single.configure(state="normal")
+        if self.btn_print_single:
+            self.btn_print_single.configure(state="normal")
 
         # Preview the label
         self.preview_area.meta = meta

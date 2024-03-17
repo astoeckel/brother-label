@@ -21,11 +21,11 @@ Backend for printing to a network printer.
 import socket
 import urllib.parse
 
-from brother_label.backends.base import BackendBase
+from brother_label.backends.base import Backend
 from brother_label.exceptions import BrotherQLError
 
 
-class BackendNetwork(BackendBase):
+class BackendNetwork(Backend):
     """
     BrotherQL backend using the Linux Kernel USB Printer Device Handles
     """

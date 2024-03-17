@@ -20,10 +20,10 @@ The commands can be sent to a printer at a later point in time or analyzed
 for debugging.
 """
 
-from brother_label.backends.base import BackendBase
+from brother_label.backends.base import Backend
 
 
-class BackendFile(BackendBase):
+class BackendFile(Backend):
     """
     BrotherQL backend using the Linux Kernel USB Printer Device Handles
     """

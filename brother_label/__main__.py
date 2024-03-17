@@ -16,7 +16,7 @@
 
 import logging
 
-from brother_label.cli_new import cli
+from brother_label.cli import cli
 from brother_label.exceptions import BrotherQLError
 
 

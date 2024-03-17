@@ -33,7 +33,7 @@ import typing
 import usb.core
 import usb.util
 
-from brother_label.backends.base import BackendBase, DeviceInfo
+from brother_label.backends.base import Backend, DeviceInfo
 from brother_label.exceptions import BrotherQLError
 
 logger = logging.getLogger(__name__)
@@ -226,7 +226,7 @@ def _discover_pyusb() -> list[DeviceInfo]:
 ###############################################################################
 
 
-class BackendPyUSB(BackendBase):
+class BackendPyUSB(Backend):
     """
     BrotherQL backend using PyUSB
     """
