@@ -195,9 +195,7 @@ def match_opcode(data: bytes) -> bytes:
     assert len(matching_opcodes) == 1
     return matching_opcodes[0]
 
-
-def interpret_response(data):
-    data = bytes(data)
+def interpret_response(data: bytes):
     if len(data) < 32:
         raise NameError("Insufficient amount of data received", data.hex())
     if not data.startswith(b"\x80\x20\x42"):
@@ -209,11 +207,11 @@ def interpret_response(data):
     error_info_2 = data[9]
     for error_bit in RESP_ERROR_INFORMATION_1_DEF:
         if error_info_1 & (1 << error_bit):
-            logger.error("Error: " + RESP_ERROR_INFORMATION_1_DEF[error_bit])
+            logger.error("Error: %s", RESP_ERROR_INFORMATION_1_DEF[error_bit])
             errors.append(RESP_ERROR_INFORMATION_1_DEF[error_bit])
     for error_bit in RESP_ERROR_INFORMATION_2_DEF:
         if error_info_2 & (1 << error_bit):
-            logger.error("Error: " + RESP_ERROR_INFORMATION_2_DEF[error_bit])
+            logger.error("Error: %s", RESP_ERROR_INFORMATION_2_DEF[error_bit])
             errors.append(RESP_ERROR_INFORMATION_2_DEF[error_bit])
 
     media_width = data[10]
@@ -240,7 +238,7 @@ def interpret_response(data):
     else:
         logger.error("Unknown phase type %02X", phase_type)
 
-    response = {
+    return {
         "status_type": status_type,
         "phase_type": phase_type,
         "media_type": media_type,
@@ -248,7 +246,6 @@ def interpret_response(data):
         "media_length": media_length,
         "errors": errors,
     }
-    return response
 
 
 def merge_specific_instructions(chunks, join_preamble=True, join_raster=True):
@@ -286,7 +283,7 @@ def merge_specific_instructions(chunks, join_preamble=True, join_raster=True):
 DEFAULT_FILENAME_FMT = "label{counter:04d}.png"
 
 
-class BrotherQLReader(object):
+class BrotherQLReader:
     def __init__(
         self,
         brother_file: typing.BinaryIO,
