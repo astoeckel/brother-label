@@ -310,7 +310,7 @@ class BrotherQLReader(object):
     def analyse(self):
         instructions = self.brother_file.read()
         for instruction in chunker(instructions):
-            for opcode in OPCODES.keys():
+            for opcode in OPCODES:
                 if instruction.startswith(opcode):
                     opcode_def = OPCODES[opcode]
                     if opcode_def[0] == "init":
@@ -328,9 +328,9 @@ class BrotherQLReader(object):
                     if opcode_def[0] == "compression":
                         self.compression = payload[0] == 0x02
                     if opcode_def[0] == "zero raster":
-                        self.black_rows.append(bytes())
+                        self.black_rows.append(b'')
                         if self.two_color_printing:
-                            self.red_rows.append(bytes())
+                            self.red_rows.append(b'')
                     if opcode_def[0] in (
                         "raster QL",
                         "2-color raster QL",
@@ -338,7 +338,7 @@ class BrotherQLReader(object):
                     ):
                         rpl = bytes(payload[2:])  # raster payload
                         if self.compression:
-                            row = bytes()
+                            row = b''
                             index = 0
                             while True:
                                 num = rpl[index]
@@ -358,15 +358,12 @@ class BrotherQLReader(object):
                             row = rpl
                         if opcode_def[0] in ("raster QL", "raster P-touch"):
                             self.black_rows.append(row)
-                        else:  # 2-color
-                            if payload[0] == 0x01:
-                                self.black_rows.append(row)
-                            elif payload[0] == 0x02:
-                                self.red_rows.append(row)
-                            else:
-                                raise NotImplementedError(
-                                    "color: 0x%x" % payload[0]
-                                )
+                        elif payload[0] == 0x01:  # 2-color
+                            self.black_rows.append(row)
+                        elif payload[0] == 0x02:
+                            self.red_rows.append(row)
+                        else:
+                            raise NotImplementedError("color: 0x%x" % payload[0])
                     if opcode_def[0] == "expanded":
                         self.two_color_printing = bool(payload[0] & (1 << 0))
                         self.cut_at_end = bool(payload[0] & (1 << 3))
@@ -390,11 +387,12 @@ class BrotherQLReader(object):
                         logger.debug(
                             "Len of red   rows: %d", len(self.red_rows)
                         )
-
-                        def get_im(rows):
+                        def get_im(rows: list[bytes]) -> Image.Image:
                             if not len(rows):
-                                return None
-                            width_dots = max(len(row) for row in rows)
+                                msg = "No rows have been specified."
+                                raise ValueError(msg)
+
+                            width_dots  = max(len(row) for row in rows)
                             height_dots = len(rows)
                             size = (width_dots * 8, height_dots)
                             expanded_rows = []
@@ -407,24 +405,16 @@ class BrotherQLReader(object):
                             data = bytes(
                                 [2**8 + ~byte for byte in data]
                             )  # invert b/w
-                            im = Image.frombytes(
+                            return Image.frombytes(
                                 "1", size, data, decoder_name="raw"
                             )
-                            return im
 
                         if not self.two_color_printing:
-                            im_black = get_im(self.black_rows)
-                            im = im_black
+                            im = get_im(self.black_rows)
                         else:
-                            im_black, im_red = (
-                                get_im(rows)
-                                for rows in (self.black_rows, self.red_rows)
-                            )
-                            im_black = im_black.convert("RGBA")
-                            im_red = im_red.convert("L")
-                            im_red = colorize(
-                                im_red, (255, 0, 0), (255, 255, 255)
-                            )
+                            im_black = get_im(self.black_rows).convert("RGBA")
+                            im_red = get_im(self.red_rows).convert("L")
+                            im_red = colorize(im_red, (255, 0, 0), (255, 255, 255))
                             im_red = im_red.convert("RGBA")
                             pixdata_black = im_black.load()
                             width, height = im_black.size
@@ -445,7 +435,7 @@ class BrotherQLReader(object):
                             counter=self.page_counter
                         )
                         im.save(img_name)
-                        logger.debug("Page saved as {}".format(img_name))
+                        logger.debug("Page saved as %s", img_name)
                         self.page_counter += 1
                         self.black_rows = []
                         self.red_rows = []
