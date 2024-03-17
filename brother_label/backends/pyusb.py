@@ -208,7 +208,7 @@ def _discover_pyusb() -> list[DeviceInfo]:
         # Attempt to read more detailed information about the device
         try:
             device_info.serial = printer.serial_number
-            device_info.product = printer.product
+            device_info.model = printer.product
             device_info.manufacturer = printer.manufacturer
         except ValueError:
             logging.debug(f"Error accessing detailed info for {printer!r}")
