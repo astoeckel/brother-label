@@ -20,20 +20,20 @@ from brother_label.cli import cli
 from brother_label.exceptions import BrotherQLError
 
 
-def main():
+def main() -> None:
     import sys
 
     try:
         cli()
         sys.exit(0)
     except BrotherQLError as e:
-        logging.error(e.args[0])
+        logging.exception(e.args[0])
         sys.exit(1)
     except PermissionError as e:
-        logging.error(e.args[0])
+        logging.exception(e.args[0])
         sys.exit(1)
     except FileNotFoundError as e:
-        logging.error(f"File not found: {e.args[0]}")
+        logging.exception("File not found: %s", e.args[0])
         sys.exit(1)
 
 
