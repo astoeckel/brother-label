@@ -363,6 +363,9 @@ class Spool:
                     label_name = f"Bitmap {orig_obj!r}"
                 elif isinstance(obj, renderers.GhostScriptRenderer):
                     label_name = f"Document {orig_obj!r}"
+                else:
+                    msg = "Unhandled renderer instance"
+                    raise NotImplementedError(msg)
 
                 if len(label_name) > 60:
                     label_name = label_name[:30] + "[...]" + label_name[-30:]
