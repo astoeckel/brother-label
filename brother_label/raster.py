@@ -7,10 +7,11 @@ The central piece of code in this module is the class
 :py:class:`BrotherQLRaster`.
 """
 
+from __future__ import annotations
+
 import logging
 import struct
 import typing
-from builtins import bytes
 from io import BytesIO
 
 import packbits
@@ -22,10 +23,13 @@ from .exceptions import (
     BrotherQLUnsupportedCmd,
 )
 
+if typing.TYPE_CHECKING:
+    import models
+
 logger = logging.getLogger(__name__)
 
 
-class BrotherLabelRaster(object):
+class BrotherLabelRaster:
     """
     This class facilitates the creation of a complete set
     of raster instructions by adding them one after the other
@@ -40,7 +44,7 @@ class BrotherLabelRaster(object):
     :ivar bool exception_on_warning: If set to True, an exception is raised if trying to add instruction which are not supported on the selected model. If set to False, the instruction is simply ignored and a warning sent to logging/stderr.
     """
 
-    def __init__(self, f: typing.BinaryIO, model):
+    def __init__(self, f: typing.BinaryIO, model: models.Model):
         self.model = model
 
         self.f = f
@@ -63,10 +67,10 @@ class BrotherLabelRaster(object):
         """
         if self.exception_on_warning:
             raise kind(problem)
-        else:
-            logger.warning(problem)
 
-    def _unsupported(self, problem):
+        logger.warning(problem)
+
+    def _unsupported(self, problem) -> None:
         """
         Raises BrotherQLUnsupportedCmd if
         exception_on_warning is set to True.
@@ -76,17 +80,17 @@ class BrotherLabelRaster(object):
         """
         self._warn(problem, kind=BrotherQLUnsupportedCmd)
 
-    def add_initialize(self):
+    def add_initialize(self) -> None:
         self.page_number = 0
         self.f.write(b"\x1B\x40")  # ESC @
 
-    def add_status_information(self):
-        """Status Information Request"""
+    def add_status_information(self) -> None:
+        """Status Information Request."""
         self.f.write(b"\x1B\x69\x53")  # ESC i S
 
-    def add_switch_mode(self):
-        """
-        Switch dynamic command mode
+    def add_switch_mode(self) -> None:
+        """Switch dynamic command mode.
+
         Switch to the raster mode on the printers that support
         the mode change (others are in raster mode already).
         """
@@ -98,12 +102,12 @@ class BrotherLabelRaster(object):
 
         self.f.write(b"\x1B\x69\x61\x01")  # ESC i a
 
-    def add_invalidate(self):
-        """clear command buffer"""
+    def add_invalidate(self) -> None:
+        """Clear command buffer."""
         self.f.write(b"\x00" * self.model.num_invalidate_bytes)
 
     @property
-    def mtype(self):
+    def mtype(self) -> bytes:
         return self._mtype
 
     @property
@@ -134,7 +138,7 @@ class BrotherLabelRaster(object):
     def pquality(self, value):
         self._pquality = bool(value)
 
-    def add_media_and_quality(self, rnumber):
+    def add_media_and_quality(self, rnumber) -> None:
         self.f.write(b"\x1B\x69\x7A")  # ESC i z
         valid_flags = 0x80
         valid_flags |= (self._mtype is not None) << 1
@@ -149,7 +153,7 @@ class BrotherLabelRaster(object):
         self.f.write(b"\x00")
         # INFO:  media/quality (1B 69 7A) --> found! (payload: 8E 0A 3E 00 D2 00 00 00 00 00)
 
-    def add_autocut(self, autocut=False):
+    def add_autocut(self, autocut: bool = False) -> None:
         if not self.model.supports_cutting:
             self._unsupported(
                 "Trying to call add_autocut with a printer that doesn't support it"
@@ -159,7 +163,7 @@ class BrotherLabelRaster(object):
         self.f.write(b"\x1B\x69\x4D")  # ESC i M
         self.f.write(bytes([autocut << 6]))
 
-    def add_cut_every(self, n=1):
+    def add_cut_every(self, n: int = 0x01) -> None:
         if not self.model.supports_cutting:
             self._unsupported(
                 "Trying to call add_cut_every with a printer that doesn't support it"
@@ -169,7 +173,7 @@ class BrotherLabelRaster(object):
         self.f.write(b"\x1B\x69\x41")  # ESC i A
         self.f.write(bytes([n & 0xFF]))
 
-    def add_expanded_mode(self):
+    def add_expanded_mode(self) -> None:
         if not self.model.supports_expanded_mode:
             self._unsupported(
                 "Trying to set expanded mode (dpi/cutting at end) on a printer that doesn't support it"
@@ -189,13 +193,13 @@ class BrotherLabelRaster(object):
         flags |= self.two_color_printing << 0
         self.f.write(bytes([flags]))
 
-    def add_margins(self, dots=0x23):
+    def add_margins(self, dots: int = 0x23) -> None:
         self.f.write(b"\x1B\x69\x64")  # ESC i d
         self.f.write(struct.pack("<H", dots))
 
-    def add_compression(self, compression=True):
-        """
-        Add an instruction enabling or disabling compression for the transmitted raster image lines.
+    def add_compression(self, compression: bool = True) -> None:
+        """Add an instruction enabling or disabling compression for the transmitted raster image lines.
+
         Not all models support compression. If the specific model doesn't support it but this method
         is called trying to enable it, either a warning is set or an exception is raised depending on
         the value of :py:attr:`exception_on_warning`
@@ -212,10 +216,12 @@ class BrotherLabelRaster(object):
         self.f.write(b"\x4D")  # M
         self.f.write(bytes([compression << 1]))
 
-    def get_pixel_width(self):
+    def get_pixel_width(self) -> int:
         return self.model.number_bytes_per_row * 8
 
-    def add_raster_data(self, image, second_image=None):
+    def add_raster_data(
+        self, image: Image.Image, second_image: Image.Image | None = None
+    ) -> None:
         """
         Add the image data to the instructions.
         The provided image has to be binary (every pixel
@@ -228,14 +234,14 @@ class BrotherLabelRaster(object):
         if image.size[0] != self.get_pixel_width():
             fmt = "Wrong pixel width: {}, expected {}"
             raise BrotherQLRasterError(
-                fmt.format(image.size[0], self.get_pixel_width())
+                fmt.format(image.size[0], self.get_pixel_width()),
             )
         images = [image]
         if second_image:
             if image.size != second_image.size:
                 fmt = "First and second image don't have the same dimesions: {} vs {}."
                 raise BrotherQLRasterError(
-                    fmt.format(image.size, second_image.size)
+                    fmt.format(image.size, second_image.size),
                 )
             images.append(second_image)
         frames = []
@@ -266,7 +272,7 @@ class BrotherLabelRaster(object):
             start += row_len
         self.f.write(file_str.getvalue())
 
-    def add_print(self, last_page=True):
+    def add_print(self, last_page: bool = True) -> None:
         if last_page:
             self.f.write(b"\x1A")  # 0x1A = ^Z = SUB; here: EOF = End of File
         else:
