@@ -13,17 +13,17 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import typing
 from dataclasses import dataclass
 
 from brother_label.labels import Color, FormFactor, Label
 
 
 @dataclass
-class Model(object):
-    """
-    This class represents a printer model. All specifics of a certain model
-    and the opcodes it supports should be contained in this class.
+class Model:
+    """Represents a printer model.
+
+    All specifics of a certain model and the opcodes it supports should be contained in
+    this class.
     """
 
     name: str
@@ -104,8 +104,9 @@ class Model(object):
 
 class ModelQL(Model):
     @property
-    def labels(self):
-        return super().labels + [
+    def labels(self) -> list[Label]:
+        return [
+            *super().labels,
             # Continuous
             Label(
                 ["12", "DK-22214"],
@@ -308,8 +309,9 @@ class ModelQL(Model):
 
 class ModelQL10(ModelQL):
     @property
-    def labels(self):
-        return super().labels + [
+    def labels(self) -> list[Label]:
+        return [
+            *super().labels,
             # Continuous
             Label(
                 ["102", "DK-22243"],
@@ -351,8 +353,9 @@ class ModelQL10(ModelQL):
 
 class ModelQL11(ModelQL10):
     @property
-    def labels(self):
-        return super().labels + [
+    def labels(self) -> list[Label]:
+        return [
+            *super().labels,
             # Continuous
             Label(
                 ["103", "DK-22246"],
@@ -377,8 +380,9 @@ class ModelQL11(ModelQL10):
 
 class ModelPT(Model):
     @property
-    def labels(self):
-        return super().labels + [
+    def labels(self) -> list[Label]:
+        return [
+            *super().labels,
             # Continuous
             Label(
                 ["12", "pt12"],
@@ -421,8 +425,9 @@ class ModelPT(Model):
 
 class ModelPTE(Model):
     @property
-    def labels(self):
-        return super().labels + [
+    def labels(self) -> list[Label]:
+        return [
+            *super().labels,
             # Continuous
             Label(
                 ["6", "pte6"],
