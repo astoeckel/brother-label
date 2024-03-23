@@ -54,7 +54,7 @@ def communicate(instructions: bytes, backend: Backend, blocking: bool = True):
         try:
             result = interpret_response(data)
         except ValueError:
-            logger.error(
+            logger.exception(
                 "TIME %.3f - Couln't understand response: %s",
                 time.time() - start,
                 data,
