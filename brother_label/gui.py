@@ -20,10 +20,9 @@ being printed.
 """
 
 import dataclasses
-import tkinter
 import tkinter as tk
-import tkinter.ttk as ttk
 import typing
+from tkinter import ttk
 
 import PIL
 import PIL.ImageTk
@@ -186,7 +185,7 @@ class LabelPreview(tk.Frame):
                 anchor="center",
                 angle=90,
             )
-        except tkinter.TclError:
+        except tk.TclError:
             self._canvas.create_text(
                 dx - 2 * aw,
                 0.5 * (y0 + y1),
