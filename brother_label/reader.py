@@ -18,7 +18,6 @@ import io
 import logging
 import struct
 import typing
-from builtins import bytes
 from collections.abc import Iterator
 
 from PIL import Image
