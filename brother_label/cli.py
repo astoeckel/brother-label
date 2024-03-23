@@ -1,3 +1,5 @@
+# ruff: noqa: T201
+
 # Brother Label Printer User-Space Driver and Printing Utility
 # Copyright (C) 2015-2024  Philipp Klaus, Dean Gardiner, Andreas Stöckel
 #
