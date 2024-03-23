@@ -8,19 +8,27 @@ logger = logging.getLogger(__name__)
 
 
 def communicate(instructions: bytes, backend: Backend, blocking: bool = True):
-    """
-    Send instruction bytes to a printer.
+    """Send instruction bytes to a printer.
 
     :param bytes instructions: The instructions to be sent to the printer.
-    :param bool blocking: Indicates whether the function call should block while waiting for the completion of the printing.
+    :param bool blocking: Indicates whether the function call should block while waiting
+        for the completion of the printing.
     """
-
     status = {
-        "instructions_sent": True,  # The instructions were sent to the printer.
-        "outcome": "unknown",  # String description of the outcome of the sending operation like: 'unknown', 'sent', 'printed', 'error'
-        "printer_state": None,  # If the selected backend supports reading back the printer state, this key will contain it.
-        "did_print": False,  # If True, a print was produced. It defaults to False if the outcome is uncertain (due to a backend without read-back capability).
-        "ready_for_next_job": False,  # If True, the printer is ready to receive the next instructions. It defaults to False if the state is unknown.
+        # The instructions were sent to the printer.
+        "instructions_sent": True,
+        # String description of the outcome of the sending operation like:
+        # 'unknown', 'sent', 'printed', 'error'
+        "outcome": "unknown",
+        # If the selected backend supports reading back the printer state, this key will
+        # contain it.
+        "printer_state": None,
+        # If True, a print was produced. It defaults to False if the outcome is
+        # uncertain (due to a backend without read-back capability).
+        "did_print": False,
+        # If True, the printer is ready to receive the next instructions. It defaults to
+        # False if the state is unknown.
+        "ready_for_next_job": False,
     }
 
     start = time.time()
@@ -35,7 +43,7 @@ def communicate(instructions: bytes, backend: Backend, blocking: bool = True):
         return status
 
     if not backend.supports_read:
-        """No need to wait for completion. The network backend doesn't support readback."""
+        # No need to wait for completion. The network backend doesn't support readback.
         return status
 
     while time.time() - start < 10:
