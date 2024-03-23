@@ -57,7 +57,7 @@ def guess_backend_name(device_url: str) -> str:
     raise ValueError(f"Cannot guess backend for {device_url!r}")
 
 
-def backend_class(backend_name: str):
+def backend_class(backend_name: str) -> type[Backend]:
     """
     Converts the given backend name into the corresponding backend class.
     """
@@ -85,5 +85,5 @@ def backend_class(backend_name: str):
     raise NotImplementedError(f"Unknown backend {backend_name!r}")
 
 
-def backend_factory(backend_name: str, device_url: str):
+def backend_factory(backend_name: str, device_url: str) -> Backend:
     return backend_class(backend_name)(device_url)
