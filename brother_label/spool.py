@@ -18,12 +18,13 @@
 Contains high-level helper functions for assembling a queue of labels that
 should be printed on the label printer.
 """
+from __future__ import annotations
 
 import dataclasses
+import logging
 import os
 import tempfile
-import typing
-import logging
+from typing import TYPE_CHECKING
 
 from brother_label import (
     backends,
@@ -36,6 +37,9 @@ from brother_label import (
     renderers,
 )
 
+if TYPE_CHECKING:
+    from brother_label.renderers.base import Renderer
+
 logger = logging.getLogger(__name__)
 
 IMAGE_FILE_EXTS = [".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".png"]
@@ -45,10 +49,10 @@ DOCUMENT_FILE_EXTS = [".eps", ".ps", ".pdf"]
 
 @dataclasses.dataclass
 class LabelMetadata:
-    """
-    Class describing a single label that is being printed. The metadata contains
-    the label size, margin, and the location of the preview image that should
-    be displayed. We're deliberately not holding the preview image in memory
+    """Class describing a single label that is being printed.
+
+    The metadata contains the label size, margin, and the location of the preview image
+    that should be displayed. We're deliberately not holding the preview image in memory
     to avoid having too many images open at the same time.
     """
 
@@ -71,8 +75,7 @@ class LabelMetadata:
 
 
 class Spool:
-    """
-    Class used to manage a print job.
+    """Class used to manage a print job.
 
     Renders the objects to the final raster commands and offers functionality
     for previewing the rasterized objects and to send them to the actual printer
@@ -95,7 +98,7 @@ class Spool:
         self._high_quality = True
         self._compress = True
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         if self._spool_file:
             self._spool_file.close()
             self._spool_file = None
@@ -140,19 +143,19 @@ class Spool:
         self.cleanup()
 
     @property
-    def model(self):
+    def model(self) -> models.Model:
         return self._model
 
     @property
-    def label(self):
+    def label(self) -> labels.Label:
         return self._label
 
     @property
-    def rotate(self):
+    def rotate(self) -> int:
         return 0 if self._auto_rotate else self._rotate
 
     @rotate.setter
-    def rotate(self, value: typing.Union[str, int]):
+    def rotate(self, value: str | int) -> None:
         if value == "auto":
             self._rotate = 0
             self._auto_rotate = True
@@ -165,27 +168,27 @@ class Spool:
         self._auto_rotate = False
 
     @property
-    def auto_rotate(self):
+    def auto_rotate(self) -> bool:
         return self._auto_rotate
 
     @auto_rotate.setter
-    def auto_rotate(self, value: bool):
+    def auto_rotate(self, value: bool) -> None:
         self._auto_rotate = bool(value)
 
     @property
-    def auto_cut(self):
+    def auto_cut(self) -> bool:
         return self._auto_cut
 
     @auto_cut.setter
-    def auto_cut(self, value: bool):
+    def auto_cut(self, value: bool) -> None:
         self._auto_cut = bool(value)
 
     @property
     def high_quality(self) -> bool:
-        return bool(self._high_quality)
+        return self._high_quality
 
     @high_quality.setter
-    def high_quality(self, value: bool):
+    def high_quality(self, value: bool) -> None:
         self._high_quality = bool(value)
 
     @property
@@ -193,7 +196,7 @@ class Spool:
         return self._compress
 
     @compress.setter
-    def compress(self, value: bool):
+    def compress(self, value: bool) -> None:
         self._compress = bool(value)
 
     @property
@@ -256,20 +259,22 @@ class Spool:
         ext = os.path.splitext(obj)[1].lower()
         if ext in IMAGE_FILE_EXTS:
             return renderers.BitmapRenderer(
-                filename_or_handle=obj, render_options=self.ro
+                filename_or_handle=obj, render_options=self.ro,
             )
-        elif ext in DOCUMENT_FILE_EXTS:
+
+        if ext in DOCUMENT_FILE_EXTS:
             return renderers.GhostScriptRenderer(
-                filename=obj, render_options=self.ro
+                filename=obj, render_options=self.ro,
             )
+
         raise exceptions.BrotherQLError(f"Unknown file extension {ext!r}")
 
-    def _resolve_text_obj(self, obj: str):
+    def _resolve_text_obj(self, obj: str) -> Renderer:
         return renderers.TextRenderer(text=obj, render_options=self.ro)
 
     def render(
         self,
-        obj: typing.Union[renderers.Renderer | str],
+        obj: renderers.Renderer | str,
         kind: str = "auto",
     ):
         assert self._spool_file
@@ -364,14 +369,14 @@ class Spool:
 
                 if obj.page_count > 1:
                     label_name += f" (pg. {page_idx + 1}/{obj.page_count})"
-                logger.info(f"Processed: {label_name}")
+                logger.info("Processed: %s", label_name)
 
             self._metadata_templates.append(
                 LabelMetadata(
                     label_name=label_name,
                     label_width_mm=self.label.tape_size[0],
                     label_height_mm=(img.size[1] * 25.4) / 300.0,
-                )
+                ),
             )
 
     def preview(self):
@@ -402,14 +407,14 @@ class Spool:
         for i, file in enumerate(sorted(os.listdir(self._spool_dir.name))):
             assert i < len(self._metadata_templates)
             meta = LabelMetadata(
-                **dataclasses.asdict(self._metadata_templates[i])
+                **dataclasses.asdict(self._metadata_templates[i]),
             )
             meta.image_filename = os.path.join(self._spool_dir.name, file)
             res.append(meta)
         return res
 
-    def print(self, backend: backends.Backend):
-        logger.info(f"Printing to {backend.device_url!r}")
+    def print(self, backend: backends.Backend) -> None:
+        logger.info("Printing to %r", backend.device_url)
         try:
             self._spool_file.seek(0, 0)
             with backend:
