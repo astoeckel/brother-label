@@ -19,13 +19,15 @@ import math
 import os.path
 import shutil
 import subprocess
-import typing
 
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
 
 from brother_label.renderers.base import PageSize, Renderer, RenderOptions
+
+logger = logging.getLogger(__name__)
+
 
 ###############################################################################
 # Private helper functions                                                    #
@@ -42,7 +44,7 @@ def _find_exe(exe: str) -> str:
 
 
 def _run_subprocess(*args, **kwargs) -> str:
-    logging.debug(f"Executing {args!r}")
+    logger.debug("Executing %r", args)
     res = subprocess.run(
         args,
         **kwargs,
@@ -78,6 +80,8 @@ def _resolve_font(font_name: str, bold: bool = False, italic: bool = False):
     fonts = fonts.splitlines()
     assert len(fonts) == 1
     assert os.path.isfile(fonts[0])
+
+    logger.debug("Resolved font %s", fonts[0])
     return fonts[0]
 
 
