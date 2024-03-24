@@ -157,7 +157,9 @@ class TextRenderer(Renderer):
         # We only support one "page"
         assert page_idx == 0
 
-        # Compute the page size taken up by the text
+        # Compute the area taken up by the text; at least return the number of
+        # pixels corresponding to the page size, so the text doesn't get scaled
+        # up.
         return PageSize(
             max(self.render_options.printable_pixels[0], self._text_width_px),
             max(self.render_options.printable_pixels[1], self._text_height_px),
