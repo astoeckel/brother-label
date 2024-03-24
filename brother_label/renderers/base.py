@@ -122,14 +122,6 @@ class RenderOptions:
     If true, enables dithering. The threshold is ignored in that case.
     """
 
-    palette: tuple[RGB, ...] = (RGB(0.0, 0.0, 0.0), RGB(1.0, 1.0, 1.0))
-    """
-    Colour palette the image should be converted to. Normally, this palette
-    just contains black and white. However, some label printers also support
-    three colours (black, white, red). This third colour should be placed
-    in this array. 
-    """
-
     @property
     def is_endless(self) -> bool:
         return self.printable_pixels[1] == 0
@@ -153,11 +145,6 @@ class RenderOptions:
             assert self.device_pixels[1] == 0
 
         assert self.rotate in {0, 90, 180, 270}
-
-        for colour in self.palette:
-            assert 0.0 <= colour.r <= 1.0
-            assert 0.0 <= colour.g <= 1.0
-            assert 0.0 <= colour.b <= 1.0
 
 
 ###############################################################################
@@ -216,24 +203,6 @@ class Renderer:
     # Private functions #
     #####################
 
-    def _get_palette_image(
-        self, size: tuple[int, int] = (1, 1)
-    ) -> PIL.Image.Image:
-        # Construct an array containing the palette data as a sequence of
-        # (R, G, B) tuples.
-        n = len(self.render_options.palette)
-        assert 1 < n <= 256
-        palette_data = []
-        for colour in self.render_options.palette:
-            palette_data.append(int(colour.r * 255))
-            palette_data.append(int(colour.g * 255))
-            palette_data.append(int(colour.b * 255))
-
-        # Create a dummy image containing the palette
-        palette_image = PIL.Image.new("P", size)
-        palette_image.putpalette(palette_data)
-        return palette_image
-
     def _render_page(self, page_idx: int) -> PIL.Image.Image:
         # Ensure that the render options make sense.
         ro = self.render_options
@@ -278,18 +247,14 @@ class Renderer:
         # Quantize the image using dithering.
         # TODO: Implement thresholding mode, use HSV transformation to split
         #       out the red channel.
-        src_image_quant = src_image.quantize(
-            method=PIL.Image.FASTOCTREE,
-            palette=self._get_palette_image(),
-            dither=PIL.Image.NONE,
-        )
+        src_image_quant = src_image.convert("1", dither=PIL.Image.NONE)
 
         # Create the output image
         tw = ro.device_pixels[0]
         th = ro.device_pixels[1]
         if ro.is_endless:
             th = h + ro.device_pixels_padding_bottom
-        tar_image = self._get_palette_image((tw, th))
+        tar_image = PIL.Image.new("1", (tw, th), 0)
         tar_image.paste(src_image_quant, ro.device_pixels_offs)
         return tar_image
 
